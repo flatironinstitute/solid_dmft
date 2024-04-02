@@ -365,31 +365,31 @@ def convert_gw_output(job_h5: str, gw_h5: str, wmax_dlr: float, it_1e: int = 0, 
     for ish in range(gw_data['n_inequiv_shells']):
         # fit IR Uloc on DLR iw mesh
         temp = _get_dlr_from_IR(Uloc_ir, ir_kernel, gw_data['mesh_dlr_iw_b'], dim=4)
-        Uloc_dlr = BlockGf(name_list=['up_0', 'down_0'], block_list=[temp, temp], make_copies=True)
+        Uloc_dlr = BlockGf(name_list=['up', 'down'], block_list=[temp, temp], make_copies=True)
 
         U_dlr_list.append(Uloc_dlr)
-        V_list.append({'up_0': Vloc.copy(), 'down_0': Vloc})
-        Hloc_list.append({'up_0': Hloc0.copy(), 'down_0': Hloc0})
-        Vhf_list.append({'up_0': Vhf_sIab.copy(), 'down_0': Vhf_sIab})
-        Vhf_dc_list.append({'up_0': Vhf_dc_sIab.copy(), 'down_0': Vhf_dc_sIab})
+        V_list.append({'up': Vloc.copy(), 'down': Vloc})
+        Hloc_list.append({'up': Hloc0.copy(), 'down': Hloc0})
+        Vhf_list.append({'up': Vhf_sIab.copy(), 'down': Vhf_sIab})
+        Vhf_dc_list.append({'up': Vhf_dc_sIab.copy(), 'down': Vhf_dc_sIab})
         n_orb_list.append(n_orb)
 
         temp = _get_dlr_from_IR(g_weiss_wsIab[:, 0, ish, :, :], ir_kernel, gw_data['mesh_dlr_iw_f'], dim=2)
-        G0_dlr = BlockGf(name_list=['up_0', 'down_0'], block_list=[temp, temp], make_copies=True)
+        G0_dlr = BlockGf(name_list=['up', 'down'], block_list=[temp, temp], make_copies=True)
         G0_dlr_list.append(G0_dlr)
 
         temp = _get_dlr_from_IR(Gloc[:, 0, ish, :, :], ir_kernel, gw_data['mesh_dlr_iw_f'], dim=2)
-        Gloc_dlr = BlockGf(name_list=['up_0', 'down_0'], block_list=[temp, temp], make_copies=True)
+        Gloc_dlr = BlockGf(name_list=['up', 'down'], block_list=[temp, temp], make_copies=True)
         Gloc_dlr_list.append(Gloc_dlr)
 
         # since Sigma can have a static shift we return DLR Imfreq mesh
         if not qp_emb:
             temp = _get_dlr_from_IR(Sigma_wsIab[:, 0, ish, :, :], ir_kernel, gw_data['mesh_dlr_iw_f'], dim=2)
-            Sigma_dlr = BlockGf(name_list=['up_0', 'down_0'], block_list=[temp, temp], make_copies=True)
+            Sigma_dlr = BlockGf(name_list=['up', 'down'], block_list=[temp, temp], make_copies=True)
             Sigma_dlr_list.append(Sigma_dlr)
 
         temp = _get_dlr_from_IR(Sigma_dc_wsIab[:, 0, ish, :, :], ir_kernel, gw_data['mesh_dlr_iw_f'], dim=2)
-        Sigma_DC_dlr = BlockGf(name_list=['up_0', 'down_0'], block_list=[temp, temp], make_copies=True)
+        Sigma_DC_dlr = BlockGf(name_list=['up', 'down'], block_list=[temp, temp], make_copies=True)
         Sigma_DC_dlr_list.append(Sigma_DC_dlr)
 
     gw_data['G0_dlr'] = G0_dlr_list

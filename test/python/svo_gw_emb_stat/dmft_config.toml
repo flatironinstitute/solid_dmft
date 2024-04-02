@@ -2,6 +2,8 @@
 seedname = "gw_stat_test"
 jobname = "out"
 
+enforce_off_diag = false
+
 n_iw = 20000
 n_tau = 200001
 w_max = 100

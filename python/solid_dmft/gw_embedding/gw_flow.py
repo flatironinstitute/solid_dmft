@@ -62,7 +62,7 @@ class dummy_sumk(object):
     create dummy sumk helper object
     """
 
-    def __init__(self, n_inequiv_shells, n_orb_list, use_rot, magnetic):
+    def __init__(self, n_inequiv_shells, n_orb_list, enforce_off_diag, use_rot, magnetic):
         self.n_inequiv_shells = n_inequiv_shells
         self.SO = 0
         self.use_rotations = use_rot
@@ -72,24 +72,42 @@ class dummy_sumk(object):
         self.gf_struct_sumk = []
         self.spin_block_names = []
         self.inequiv_to_corr = []
+        self.corr_to_inequiv = []
         self.deg_shells = []
         self.dc_energ = [0.0 for ish in range(self.n_inequiv_shells)]
         self.sumk_to_solver = [{} for ish in range(self.n_inequiv_shells)]
         self.solver_to_sumk = [{} for ish in range(self.n_inequiv_shells)]
         self.solver_to_sumk_block = [{} for ish in range(self.n_inequiv_shells)]
         for ish in range(self.n_inequiv_shells):
-            self.gf_struct_solver.append({'up_0': n_orb_list[ish], 'down_0': n_orb_list[ish]})
-            self.gf_struct_sumk.append({'up': n_orb_list[ish], 'down': n_orb_list[ish]})
-            self.spin_block_names.append(['up', 'down'])
             self.inequiv_to_corr.append(ish)
-            if not magnetic:
-                self.deg_shells.append([['up_0', 'down_0']])
-            # setup standard mapping between sumk and solver
-            for block, inner_dim in self.gf_struct_sumk[ish].items():
-                self.solver_to_sumk_block[ish][block] = block
-                for inner in range(inner_dim):
-                    self.sumk_to_solver[ish][(block, inner)] = (block + '_0', inner)
-                    self.solver_to_sumk[ish][(block + '_0', inner)] = (block, inner)
+            self.corr_to_inequiv.append(ish)
+            self.spin_block_names.append(['up', 'down'])
+            self.gf_struct_sumk.append([('up', n_orb_list[ish]), ('down', n_orb_list[ish])])
+
+            # use full off-diagonal block structure in impurity solver
+            if enforce_off_diag:
+                self.gf_struct_solver.append({'up_0': n_orb_list[ish], 'down_0': n_orb_list[ish]})
+                if not magnetic:
+                    self.deg_shells.append([['up_0', 'down_0']])
+                # setup standard mapping between sumk and solver
+                for block, inner_dim in self.gf_struct_sumk[ish]:
+                    self.solver_to_sumk_block[ish][f'{block}_0'] = block
+                    for iorb in range(inner_dim):
+                        self.sumk_to_solver[ish][(block, iorb)] = (block + '_0', iorb)
+                        self.solver_to_sumk[ish][(block + '_0', iorb)] = (block, iorb)
+            else:
+                self.gf_struct_solver.append({})
+                self.deg_shells.append([])
+                for block, inner_dim in self.gf_struct_sumk[ish]:
+                    for iorb in range(inner_dim):
+                        self.gf_struct_solver[ish][f'{block}_{iorb}'] = 1
+                        if not magnetic and block == 'up':
+                            self.deg_shells[ish].append([f'up_{iorb}', f'down_{iorb}'])
+                        # setup standard mapping between sumk and solver
+                        self.solver_to_sumk_block[ish][f'{block}_{iorb}'] = block
+                        self.sumk_to_solver[ish][(block, iorb)] = (f'{block}_{iorb}', 0)
+                        self.solver_to_sumk[ish][(f'{block}_{iorb}', 0)] = (block, iorb)
+
 
         self.gf_struct_solver_list = [sorted([(k, v) for k, v in list(gfs.items())], key=lambda x: x[0]) for gfs in self.gf_struct_solver]
 
@@ -101,6 +119,7 @@ class dummy_sumk(object):
             sumk_to_solver=self.sumk_to_solver,
             solver_to_sumk_block=self.solver_to_sumk_block,
             deg_shells=self.deg_shells,
+            corr_to_inequiv = self.corr_to_inequiv,
             transformation=None,
         )
 
@@ -222,7 +241,10 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
         general_params['magnetic'] = True
 
     # dummy helper class for sumk
-    sumk = dummy_sumk(gw_params['n_inequiv_shells'], gw_params['n_orb'], gw_params['use_rot'], general_params['magnetic'])
+    sumk = dummy_sumk(gw_params['n_inequiv_shells'], gw_params['n_orb'],
+                      general_params['enforce_off_diag'], gw_params['use_rot'],
+                      general_params['magnetic'])
+
     sumk.mesh = MeshImFreq(beta=gw_params['beta'], statistic='Fermion', n_iw=general_params['n_iw'])
     sumk.chemical_potential = gw_params['mu_emb']
     sumk.dc_imp = gw_params['Vhf_dc']
@@ -295,12 +317,16 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
                 mpi.report('{}, {} part'.format(key, name))
                 mpi.report(func(value))
 
+        if not general_params['enforce_off_diag']:
+            mpi.report('\n*** WARNING: off-diagonal elements are neglected in the impurity solver ***')
+
         if solver_type_per_imp[ish] == 'cthyb' and solver_params[ish]['delta_interface']:
             mpi.report('\n Using the delta interface for cthyb passing Delta(tau) and Hloc0 directly.\n')
+            Gloc_dlr = sumk.block_structure.convert_gf(gw_params['Gloc_dlr'][ish], ish_from=ish, space_from='sumk', space_to='solver')
             # prepare solver input
-            imp_eal = gw_params['Hloc0'][ish]
+            imp_eal = sumk.block_structure.convert_matrix(gw_params['Hloc0'][ish], ish_from=ish, space_from='sumk', space_to='solver')
             # fill Delta_time from Delta_freq sumk to solver
-            for name, g0 in gw_params['G0_dlr'][ish]:
+            for name, g0 in Gloc_dlr:
                 G0_dlr_iw = make_gf_dlr_imfreq(g0)
                 # make non-interacting impurity Hamiltonian hermitian
                 imp_eal[name] = (imp_eal[name] + imp_eal[name].T.conj())/2
@@ -342,8 +368,10 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
                             Hloc_0 += spin_block[o1, o2].real / 2 * (c_dag(spin, o1) * c(spin, o2) + c_dag(spin, o2) * c(spin, o1))
             solvers[ish].Hloc_0 = Hloc_0
         else:
+            # convert G0 to solver basis
+            G0_dlr = sumk.block_structure.convert_gf(gw_params['G0_dlr'][ish], ish_from=ish, space_from='sumk', space_to='solver')
             # dyson equation to extract G0_freq, using Hermitian symmetry
-            solvers[ish].G0_freq << make_hermitian(make_gf_imfreq(gw_params['G0_dlr'][ish], n_iw=general_params['n_iw']))
+            solvers[ish].G0_freq << make_hermitian(make_gf_imfreq(G0_dlr, n_iw=general_params['n_iw']))
 
         mpi.report('\nSolving the impurity problem for shell {} ...'.format(ish))
         mpi.barrier()
@@ -382,13 +410,23 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
 
             # average Hartree shift if not magnetic
             if not general_params['magnetic']:
-                solvers[ish].Sigma_Hartree['up_0'] = 0.5*(solvers[ish].Sigma_Hartree['up_0']+
-                                                          solvers[ish].Sigma_Hartree['down_0'])
-                solvers[ish].Sigma_Hartree['down_0'] = solvers[ish].Sigma_Hartree['up_0']
+                if general_params['enforce_off_diag']:
+                    solvers[ish].Sigma_Hartree['up_0'] = 0.5*(solvers[ish].Sigma_Hartree['up_0']+
+                                                              solvers[ish].Sigma_Hartree['down_0'])
+                    solvers[ish].Sigma_Hartree['down_0'] = solvers[ish].Sigma_Hartree['up_0']
+                else:
+                    for iorb in range(gw_params['n_orb'][ish]):
+                        solvers[ish].Sigma_Hartree[f'up_{iorb}'] = 0.5*(solvers[ish].Sigma_Hartree[f'up_{iorb}']+
+                                                                      solvers[ish].Sigma_Hartree[f'down_{iorb}'])
+                        solvers[ish].Sigma_Hartree[f'down_{iorb}'] = solvers[ish].Sigma_Hartree[f'up_{iorb}']
 
             iw_mesh = solvers[ish].Sigma_freq.mesh
-            for i, (block, gf) in enumerate(Sigma_dlr[ish]):
-                Vhf_imp_sIab[i,ish] = solvers[ish].Sigma_Hartree[block]
+            # convert Sigma to sumk basis
+            Sigma_dlr_sumk = sumk.block_structure.convert_gf(Sigma_dlr[ish], ish_from=ish, space_from='solver', space_to='sumk')
+            Sigma_Hartree_sumk = sumk.block_structure.convert_matrix(solvers[ish].Sigma_Hartree, ish_from=ish, space_from='solver', space_to='sumk')
+            # store Sigma and V_HF in sumk basis on IR mesh
+            for i, (block, gf) in enumerate(Sigma_dlr_sumk):
+                Vhf_imp_sIab[i,ish] = Sigma_Hartree_sumk[block]
                 for iw in range(len(ir_mesh_idx)):
                     Sigma_ir[iw,i,ish] = gf(iw_mesh(ir_mesh_idx[iw]))
 

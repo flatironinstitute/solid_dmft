@@ -92,10 +92,10 @@ def _load_crpa_interaction_matrix(sum_k, general_params, gw_params, filename='UI
         for icrsh in range(sum_k.n_inequiv_shells):
             # for now we assume that up / down are equal
             if general_params['h_int_type'][icrsh] in  ('crpa', 'crpa_density_density'):
-                Uloc_0 = make_gf_imfreq(gw_params['Uloc_dlr'][icrsh]['up_0'],1)
-                u_matrix_four_indices_per_shell.append(Uloc_0.data[0,:,:,:,:] + gw_params['Vloc'][icrsh]['up_0'])
+                Uloc_0 = make_gf_imfreq(gw_params['Uloc_dlr'][icrsh]['up'],1)
+                u_matrix_four_indices_per_shell.append(Uloc_0.data[0,:,:,:,:] + gw_params['Vloc'][icrsh]['up'])
             else:
-                u_matrix_four_indices_per_shell.append(gw_params['Vloc'][icrsh]['up_0'])
+                u_matrix_four_indices_per_shell.append(gw_params['Vloc'][icrsh]['up'])
 
 
     return u_matrix_four_indices_per_shell
