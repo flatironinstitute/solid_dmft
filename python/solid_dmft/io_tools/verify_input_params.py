@@ -81,6 +81,10 @@ def _verify_input_params_solver(params: FullConfig) -> None:
             if entry['type'] not in supported_grids['real']:
                 raise ValueError(f'Solver {entry["type"]} does not support imaginary-frequency grid.')
 
+    for entry in solver_params:
+        if entry['type'] == 'cthyb' and entry['crm_dyson_solver'] and not entry['measure_density_matrix']:
+            raise ValueError('Solver "cthyb" when using "crm_dyson_solver" must also measure the density matrix: "measure_density_matrix" = True')
+
 def _verify_input_params_gw(params: FullConfig) -> None:
     pass
 

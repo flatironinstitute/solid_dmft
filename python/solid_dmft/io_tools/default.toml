@@ -9,6 +9,8 @@ csc = false
 dc = true
 dc_dmft = "<none>"
 dc_type = "<none>"
+dlr_eps = "<none>"
+dlr_wmax = "<none>"
 enforce_off_diag = true
 eta = "<none>"
 fixed_mu_value = "<none>"
@@ -54,7 +56,6 @@ sigma_mix = 1.0
 store_solver = false
 U = "<none>"
 U_prime = "<none>"
-w_max = "<none>"
 w_range = [-10, 10]
 
 # Keys in this section that should be passed to the triqs solver
@@ -62,7 +63,7 @@ w_range = [-10, 10]
 # when initializing the solver.py class from solid_dmft
 [[solver]]
 type = "cthyb"
-idx_impurities = "<none>"
+crm_dyson_solver = false
 delta_interface = false
 diag_delta = false
 fit_max_moment = "<none>"
@@ -70,6 +71,7 @@ fit_max_n = "<none>"
 fit_max_w = "<none>"
 fit_min_n = "<none>"
 fit_min_w = "<none>"
+idx_impurities = "<none>"
 imag_threshold = 1.0e-14
 legendre_fit = false
 length_cycle = "<no default>"

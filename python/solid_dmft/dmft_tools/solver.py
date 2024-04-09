@@ -25,9 +25,8 @@
 import numpy as np
 from itertools import product
 
-from triqs.gf import MeshImTime, MeshReTime, MeshReFreq, MeshLegendre, Gf, BlockGf, make_gf_imfreq, make_hermitian, Omega, iOmega_n, make_gf_from_fourier, fit_hermitian_tail, make_gf_imtime, make_gf_dlr, make_gf_dlr_imfreq
+from triqs.gf import MeshImTime, MeshReTime, MeshDLRImFreq, MeshReFreq, MeshLegendre, Gf, BlockGf, make_gf_imfreq, make_hermitian, Omega, iOmega_n, make_gf_from_fourier, make_gf_dlr, fit_gf_dlr, make_gf_dlr_imtime
 from triqs.gf.tools import inverse, make_zero_tail
-from triqs.gf import make_gf_imfreq
 from triqs.gf.descriptors import Fourier
 from triqs.operators import c_dag, c, Operator, util
 from triqs.operators.util.U_matrix import reduce_4index_to_2index
@@ -280,6 +279,10 @@ class SolverStructure:
                                                             )
             # move original G_freq to G_freq_orig
             self.G_time_orig = self.G_time.copy()
+
+        if self.solver_params['type'] in ['cthyb'] and self.solver_params['crm_dyson_solver']:
+            self.G_time_orig = self.G_time.copy()
+            self.Sigma_dlr = None
 
         if self.solver_params['type'] in ['cthyb', 'hubbardI'] and self.solver_params['measure_density_matrix']:
             self.density_matrix = None
@@ -1019,6 +1022,75 @@ class SolverStructure:
             elif self.solver_params['perform_tail_fit'] and not self.solver_params['legendre_fit']:
                 # if tailfit has been used replace Sigma with the tail fitted Sigma from cthyb
                 self.Sigma_freq << self.triqs_solver.Sigma_iw
+            elif self.solver_params['crm_dyson_solver']:
+                from triqs.gf.dlr_crm_dyson_solver import minimize_dyson
+
+                mpi.report('\nCRM Dyson solver to extract Σ impurity\n')
+                # fit QMC G_tau to DLR
+                if mpi.is_master_node():
+                    self.G_time_orig << self.triqs_solver.G_tau
+                    G_dlr = fit_gf_dlr(self.triqs_solver.G_tau,
+                                       w_max=self.general_params['dlr_wmax'], eps=self.general_params['dlr_eps'])
+                    self.G_time = make_gf_dlr_imtime(G_dlr)
+
+                    # assume little error on G0_iw and use to get G0_dlr
+                    mesh_dlr_iw = MeshDLRImFreq(G_dlr.mesh)
+                    G0_dlr_iw = self.sum_k.block_structure.create_gf(ish=self.icrsh, gf_function=Gf, mesh=mesh_dlr_iw, space='solver')
+                    for block, gf in G0_dlr_iw:
+                        for iwn in mesh_dlr_iw:
+                            gf[iwn] = self.G0_freq[block](iwn)
+                    self.sum_k.symm_deg_gf(G0_dlr_iw, ish=self.icrsh)
+                    G0_dlr = make_gf_dlr(G0_dlr_iw)
+
+                    # average moments
+                    self.sum_k.symm_deg_gf(self.triqs_solver.Sigma_Hartree, ish=self.icrsh)
+                    first_mom = {}
+                    for block, mom in self.triqs_solver.Sigma_moments.items():
+                        first_mom[block] = mom[1]
+                    self.sum_k.symm_deg_gf(first_mom, ish=self.icrsh)
+
+                    for block, mom in self.triqs_solver.Sigma_moments.items():
+                        mom[0] = self.triqs_solver.Sigma_Hartree[block]
+                        mom[1] = first_mom[block]
+
+                    # minimize dyson for the first entry of each deg shell
+                    Sigma_dlr = self.sum_k.block_structure.create_gf(ish=self.icrsh, gf_function=Gf, mesh=G_dlr.mesh, space='solver')
+                    # without any degenerate shells we run the minimization for all blocks
+                    if self.sum_k.deg_shells[self.icrsh] == []:
+                        for block, gf in Sigma_dlr:
+                            print('Minimizing Dyson via CRM for Σ[block]:', block)
+                            gf, min_res = minimize_dyson(G0_tau=G0_dlr[block],
+                                                         G_tau=G_dlr[block],
+                                                         Sigma_moments=self.triqs_solver.Sigma_moments[block],
+                                                         verbose=True
+                                                        )
+                    else:
+                        for deg_shell in self.sum_k.deg_shells[self.icrsh]:
+                            for i, block in enumerate(deg_shell):
+                                if i == 0:
+                                    print('Minimizing Dyson via CRM for Σ[block]:', block)
+                                    Sigma_dlr[block], min_res = minimize_dyson(G0_tau=G0_dlr[block],
+                                                                        G_tau=G_dlr[block],
+                                                                        Sigma_moments=self.triqs_solver.Sigma_moments[block],
+                                                                        verbose=True
+                                                                        )
+                                    sol_block = block
+                                else:
+                                    Sigma_dlr[block] << Sigma_dlr[sol_block]
+
+                                    print(f'Copying result from first block of deg list to {block}')
+                    print('\n')
+
+                    self.Sigma_freq = make_gf_imfreq(Sigma_dlr, n_iw=self.general_params['n_iw'])
+                    for block, gf in self.Sigma_freq:
+                        gf += self.triqs_solver.Sigma_moments[block][0]
+                    self.Sigma_dlr = Sigma_dlr
+
+                mpi.barrier()
+                self.Sigma_freq = mpi.bcast(self.Sigma_freq)
+                self.Sigma_dlr = mpi.bcast(self.Sigma_dlr)
+                self.G_time = mpi.bcast(self.G_time)
+                self.G_time_orig = mpi.bcast(self.G_time_orig)
             else:
                 # obtain Sigma via dyson from symmetrized G_freq
                 self.Sigma_freq << inverse(self.G0_freq) - inverse(self.G_freq)

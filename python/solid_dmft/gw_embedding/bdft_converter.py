@@ -240,7 +240,7 @@ def calc_W_from_Gloc(Gloc_dlr: Gf | BlockGf, U: np.ndarray | dict) -> Gf | Block
     return W_dlr
 
 
-def convert_gw_output(job_h5: str, gw_h5: str, wmax_dlr: float, it_1e: int = 0, it_2e: int = 0) -> tuple[dict, IAFT]:
+def convert_gw_output(job_h5: str, gw_h5: str, dlr_wmax: float, dlr_eps: float, it_1e: int = 0, it_2e: int = 0) -> tuple[dict, IAFT]:
     """
     read bdft output and convert to triqs Gf DLR objects
 
@@ -250,8 +250,10 @@ def convert_gw_output(job_h5: str, gw_h5: str, wmax_dlr: float, it_1e: int = 0, 
         path to solid_dmft job file
     gw_h5: string
         path to GW checkpoint file for AIMBES code
-    wmax_dlr: float
+    dlr_wmax: float
         DLR energy cutoff, same as Lambda / beta for the impurity problem
+    dlr_eps: float
+        precision for DLR basis set
     it_1e: int, optional
         iteration to read from gw_h5 calculation for 1e downfolding, defaults to last iteration
     it_2e: int, optional
@@ -269,7 +271,8 @@ def convert_gw_output(job_h5: str, gw_h5: str, wmax_dlr: float, it_1e: int = 0, 
 
     mpi.report('reading output from bdft code')
 
-    gw_data = {'wmax_dlr': wmax_dlr}
+    gw_data = {'dlr_wmax': dlr_wmax,
+               'dlr_eps': dlr_eps}
 
     with HDFArchive(gw_h5, 'r') as ar:
         if not it_1e or not it_2e:
@@ -340,14 +343,14 @@ def convert_gw_output(job_h5: str, gw_h5: str, wmax_dlr: float, it_1e: int = 0, 
     gw_data['mesh_dlr_iw_b'] = MeshDLRImFreq(
         beta=gw_data['beta'],
         statistic='Boson',
-        w_max=gw_data['wmax_dlr'],
-        eps=gw_data['prec'],
+        w_max=gw_data['dlr_wmax'],
+        eps=gw_data['dlr_eps'],
     )
     gw_data['mesh_dlr_iw_f'] = MeshDLRImFreq(
         beta=gw_data['beta'],
         statistic='Fermion',
-        w_max=gw_data['wmax_dlr'],
-        eps=gw_data['prec'],
+        w_max=gw_data['dlr_wmax'],
+        eps=gw_data['dlr_eps'],
     )
 
     (

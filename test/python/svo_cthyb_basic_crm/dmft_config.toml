@@ -8,6 +8,8 @@ mu_initial_guess = -0.027041
 prec_mu = 0.001
 n_iw = 501
 n_tau = 10001
+dlr_wmax = 4
+dlr_eps = 1e-8
 
 h_int_type = "kanamori"
 U = 8.0
@@ -31,10 +33,9 @@ load_sigma = false
 
 [solver]
 type = "cthyb"
-n_l = 35
-length_cycle = 120
+length_cycle = 250
 n_warmup_cycles = 8000
 n_cycles_tot = 1e+4
 imag_threshold = 1e-5
-measure_G_l = true
 measure_density_matrix = true
+crm_dyson_solver = true
