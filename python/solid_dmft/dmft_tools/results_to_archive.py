@@ -80,7 +80,7 @@ def _compile_information(sum_k, general_params, solver_params, solvers, map_imp_
                 write_to_h5['Gimp_l_{}'.format(icrsh)] = solvers[icrsh].G_l
 
             if solver_params[isolvsec]['crm_dyson_solver']:
-                write_to_h5['G_time_orig_{}'.format(icrsh)] = solvers[icrsh].G_time_orig
+                write_to_h5['G_time_dlr_{}'.format(icrsh)] = solvers[icrsh].G_time_dlr
                 write_to_h5['Sigma_dlr_{}'.format(icrsh)] = solvers[icrsh].Sigma_dlr
 
             # if solver_params['measure_G_iw']:

@@ -281,7 +281,7 @@ class SolverStructure:
             self.G_time_orig = self.G_time.copy()
 
         if self.solver_params['type'] in ['cthyb'] and self.solver_params['crm_dyson_solver']:
-            self.G_time_orig = self.G_time.copy()
+            self.G_time_dlr = None
             self.Sigma_dlr = None
 
         if self.solver_params['type'] in ['cthyb', 'hubbardI'] and self.solver_params['measure_density_matrix']:
@@ -1028,10 +1028,9 @@ class SolverStructure:
                 mpi.report('\nCRM Dyson solver to extract Σ impurity\n')
                 # fit QMC G_tau to DLR
                 if mpi.is_master_node():
-                    self.G_time_orig << self.triqs_solver.G_tau
                     G_dlr = fit_gf_dlr(self.triqs_solver.G_tau,
                                        w_max=self.general_params['dlr_wmax'], eps=self.general_params['dlr_eps'])
-                    self.G_time = make_gf_dlr_imtime(G_dlr)
+                    self.G_time_dlr = make_gf_dlr_imtime(G_dlr)
 
                     # assume little error on G0_iw and use to get G0_dlr
                     mesh_dlr_iw = MeshDLRImFreq(G_dlr.mesh)
@@ -1058,6 +1057,7 @@ class SolverStructure:
                     # without any degenerate shells we run the minimization for all blocks
                     if self.sum_k.deg_shells[self.icrsh] == []:
                         for block, gf in Sigma_dlr:
+                            np.random.seed(85281)
                             print('Minimizing Dyson via CRM for Σ[block]:', block)
                             gf, min_res = minimize_dyson(G0_tau=G0_dlr[block],
                                                          G_tau=G_dlr[block],
@@ -1068,6 +1068,7 @@ class SolverStructure:
                         for deg_shell in self.sum_k.deg_shells[self.icrsh]:
                             for i, block in enumerate(deg_shell):
                                 if i == 0:
+                                    np.random.seed(85281)
                                     print('Minimizing Dyson via CRM for Σ[block]:', block)
                                     Sigma_dlr[block], min_res = minimize_dyson(G0_tau=G0_dlr[block],
                                                                         G_tau=G_dlr[block],
@@ -1090,7 +1091,7 @@ class SolverStructure:
                 self.Sigma_freq = mpi.bcast(self.Sigma_freq)
                 self.Sigma_dlr = mpi.bcast(self.Sigma_dlr)
                 self.G_time = mpi.bcast(self.G_time)
-                self.G_time_orig = mpi.bcast(self.G_time_orig)
+                self.G_time_dlr = mpi.bcast(self.G_time_dlr)
             else:
                 # obtain Sigma via dyson from symmetrized G_freq
                 self.Sigma_freq << inverse(self.G0_freq) - inverse(self.G_freq)

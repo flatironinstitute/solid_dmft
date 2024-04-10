@@ -240,7 +240,7 @@ def calc_W_from_Gloc(Gloc_dlr: Gf | BlockGf, U: np.ndarray | dict) -> Gf | Block
     return W_dlr
 
 
-def convert_gw_output(job_h5: str, gw_h5: str, dlr_wmax: float, dlr_eps: float, it_1e: int = 0, it_2e: int = 0) -> tuple[dict, IAFT]:
+def convert_gw_output(job_h5: str, gw_h5: str, it_1e: int = 0, it_2e: int = 0) -> tuple[dict, IAFT]:
     """
     read bdft output and convert to triqs Gf DLR objects
 
@@ -250,10 +250,6 @@ def convert_gw_output(job_h5: str, gw_h5: str, dlr_wmax: float, dlr_eps: float, 
         path to solid_dmft job file
     gw_h5: string
         path to GW checkpoint file for AIMBES code
-    dlr_wmax: float
-        DLR energy cutoff, same as Lambda / beta for the impurity problem
-    dlr_eps: float
-        precision for DLR basis set
     it_1e: int, optional
         iteration to read from gw_h5 calculation for 1e downfolding, defaults to last iteration
     it_2e: int, optional
@@ -271,8 +267,7 @@ def convert_gw_output(job_h5: str, gw_h5: str, dlr_wmax: float, dlr_eps: float, 
 
     mpi.report('reading output from bdft code')
 
-    gw_data = {'dlr_wmax': dlr_wmax,
-               'dlr_eps': dlr_eps}
+    gw_data = {}
 
     with HDFArchive(gw_h5, 'r') as ar:
         if not it_1e or not it_2e:
@@ -287,17 +282,21 @@ def convert_gw_output(job_h5: str, gw_h5: str, dlr_wmax: float, dlr_eps: float, 
         gw_data['mu_emb'] = ar[f'downfold_1e/iter{it_1e}']['mu']
         gw_data['beta'] = ar['imaginary_fourier_transform']['beta']
         gw_data['lam'] = ar['imaginary_fourier_transform']['lambda']
-        gw_data['w_max'] = gw_data['lam'] / gw_data['beta']
+        gw_data['gw_wmax'] = gw_data['lam'] / gw_data['beta']
         gw_data['number_of_spins'] = ar['system/number_of_spins']
         assert gw_data['number_of_spins'] == 1, 'spin calculations not yet supported in converter'
 
         prec = ar['imaginary_fourier_transform']['prec']
         if prec == 'high':
-            gw_data['prec'] = 1e-15
+            # set to highest DLR precision possible
+            gw_data['gw_ir_prec'] = 1e-15
+            gw_data['gw_dlr_prec'] = 1e-13
         elif prec == 'mid':
-            gw_data['prec'] = 1e-10
+            gw_data['gw_ir_prec'] = 1e-10
+            gw_data['gw_dlr_prec'] = 1e-10
         elif prec == 'low':
-            gw_data['prec'] = 1e-6
+            gw_data['gw_ir_prec'] = 1e-6
+            gw_data['gw_dlr_prec'] = 1e-6
 
         # 1 particle properties
         g_weiss_wsIab = ar[f'downfold_1e/iter{it_1e}']['g_weiss_wsIab']
@@ -338,19 +337,19 @@ def convert_gw_output(job_h5: str, gw_h5: str, dlr_wmax: float, dlr_eps: float, 
     # get IR object
     mpi.report('create IR kernel and convert to DLR')
     # create IR kernel
-    ir_kernel = IAFT(beta=gw_data['beta'], lmbda=gw_data['lam'], prec=gw_data['prec'])
+    ir_kernel = IAFT(beta=gw_data['beta'], lmbda=gw_data['lam'], prec=gw_data['gw_ir_prec'])
 
     gw_data['mesh_dlr_iw_b'] = MeshDLRImFreq(
         beta=gw_data['beta'],
         statistic='Boson',
-        w_max=gw_data['dlr_wmax'],
-        eps=gw_data['dlr_eps'],
+        w_max=gw_data['gw_wmax'],
+        eps=gw_data['gw_dlr_prec'],
     )
     gw_data['mesh_dlr_iw_f'] = MeshDLRImFreq(
         beta=gw_data['beta'],
         statistic='Fermion',
-        w_max=gw_data['dlr_wmax'],
-        eps=gw_data['dlr_eps'],
+        w_max=gw_data['gw_wmax'],
+        eps=gw_data['gw_dlr_prec'],
     )
 
     (
