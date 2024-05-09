@@ -191,7 +191,7 @@ def _run_maxent(continuators, error, omega_min, omega_max, n_points_maxent,
         solver.set_error(error)
         solver.omega = omega_mesh
         solver.alpha_mesh = LogAlphaMesh(alpha_min=1e-6, alpha_max=1e2, n_points=n_points_alpha)
-        # Turns off MaxEnt output, it's far too messy in the parallel mode
+       # Turns off MaxEnt output, it's far too messy in the parallel mode
         # For some reason, MaxEnt still prints "appending"
         solver.maxent_diagonal.logtaker.verbose = VerbosityFlags.Quiet
         solver.maxent_offdiagonal.logtaker.verbose = VerbosityFlags.Quiet
