@@ -38,6 +38,9 @@ import triqs.utility.mpi as mpi
 from triqs.gf import make_gf_imfreq
 from triqs.operators import util, n, c, c_dag, Operator
 from solid_dmft.dmft_tools import solver
+from solid_dmft.gw_embedding.bdft_converter import convert_gw_output
+
+
 try:
     import forktps as ftps
 except ImportError:
@@ -87,18 +90,35 @@ def _load_crpa_interaction_matrix(sum_k, general_params, gw_params, filename='UI
         if not np.allclose(u_matrix_four_indices.shape, first_index_shell):
             print('Warning: different number of orbitals in cRPA matrix than in calculation.')
 
-    if gw_params['code'] == 'aimbes':
+    elif gw_params['code'] == 'aimbes':
         u_matrix_four_indices_per_shell = []
-        for icrsh in range(sum_k.n_inequiv_shells):
-            # for now we assume that up / down are equal
-            if general_params['h_int_type'][icrsh] in  ('crpa', 'crpa_density_density'):
-                Uloc_0 = make_gf_imfreq(gw_params['Uloc_dlr'][icrsh]['up'],1)
-                u_matrix_four_indices_per_shell.append(Uloc_0.data[0,:,:,:,:] + gw_params['Vloc'][icrsh]['up'])
-            else:
-                u_matrix_four_indices_per_shell.append(gw_params['Vloc'][icrsh]['up'])
+        # lad GW input from h5 file
+        if mpi.is_master_node():
+            if 'Uloc_dlr' not in gw_params:
+                gw_data, ir_kernel = convert_gw_output(
+                    general_params['jobname'] + '/' + general_params['seedname'] + '.h5',
+                    gw_params['h5_file'],
+                    it_1e = gw_params['it_1e'],
+                    it_2e = gw_params['it_2e'],
+                    ha_ev_conv = True
+                )
+                gw_params.update(gw_data)
+            for icrsh in range(sum_k.n_inequiv_shells):
+                # for now we assume that up / down are equal
+                if general_params['h_int_type'][icrsh] in  ('crpa', 'crpa_density_density'):
+                    Uloc_0 = make_gf_imfreq(gw_params['Uloc_dlr'][icrsh]['up'],1)
+                    u_matrix_four_indices_per_shell.append(Uloc_0.data[0,:,:,:,:] + gw_params['Vloc'][icrsh]['up'])
+                else:
+                    u_matrix_four_indices_per_shell.append(gw_params['Vloc'][icrsh]['up'])
 
+                u_matrix_four_indices_per_shell[icrsh] = u_matrix_four_indices_per_shell[icrsh]
+        mpi.barrier()
+        u_matrix_four_indices_per_shell = mpi.bcast(u_matrix_four_indices_per_shell)
+        gw_params = mpi.bcast(gw_params)
+    else:
+        raise ValueError('Unknown code for reading cRPA results: {}'.format(gw_params['code']))
 
-    return u_matrix_four_indices_per_shell
+    return u_matrix_four_indices_per_shell, gw_params
 
 
 # def _adapt_U_2index_for_SO(Umat, Upmat):
@@ -569,22 +589,24 @@ def construct(sum_k, general_params, solver_type_per_imp,  gw_params=None):
 
         # read from file options
         if general_params['h_int_type'][icrsh] in ('crpa', 'crpa_density_density', 'dyn_density_density', 'dyn_full'):
-            Umat_full = _load_crpa_interaction_matrix(sum_k, general_params, gw_params)[icrsh]
+            Umat_full, gw_params = _load_crpa_interaction_matrix(sum_k, general_params, gw_params)
 
             if sum_k.SO == 1:
-                Umat_full = _adapt_U_4index_for_SO(Umat_full)
+                Umat_full[icrsh] = _adapt_U_4index_for_SO(Umat_full[icrsh])
 
             # Rotates the interaction matrix
             if sum_k.use_rotations:
-                Umat_full = _rotate_four_index_matrix(sum_k, general_params, Umat_full, icrsh)
+                Umat_full[icrsh] = _rotate_four_index_matrix(sum_k, general_params, Umat_full[icrsh], icrsh)
+                Umat_full[icrsh][np.abs(Umat_full[icrsh]) < general_params['U_crpa_threshold']] = 0.0
 
+            gw_params['U_matrix_rot']= Umat_full
             # construct slater / density density from U tensor
             if general_params['h_int_type'][icrsh] in ('crpa', 'dyn_full'):
-                h_int[icrsh] = _construct_slater(sum_k, general_params, Umat_full.real, icrsh)
+                h_int[icrsh] = _construct_slater(sum_k, general_params, Umat_full[icrsh].real, icrsh)
             else:
-                h_int[icrsh] = _construct_density_density(sum_k, general_params, Umat_full.real, icrsh)
+                h_int[icrsh] = _construct_density_density(sum_k, general_params, Umat_full[icrsh].real, icrsh)
             continue
 
         raise NotImplementedError('Error when constructing the interaction Hamiltonian.')
 
-    return h_int
+    return h_int, gw_params

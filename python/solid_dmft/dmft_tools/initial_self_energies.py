@@ -38,10 +38,9 @@ from triqs.gf import BlockGf, Gf, make_gf_imfreq, MeshDLRImFreq, make_gf_dlr, Me
 from triqs.operators import util
 import itertools
 
-from triqs.plot.mpl_interface import *
-from solid_dmft.gw_embedding.bdft_converter import calc_Sigma_DC_gw, calc_W_from_Gloc
+from solid_dmft.gw_embedding.bdft_converter import calc_Sigma_DC_gw, calc_W_from_Gloc, convert_gw_output
 
-def calculate_double_counting(sum_k, density_matrix, general_params, advanced_params, solver_type_per_imp):
+def calculate_double_counting(sum_k, density_matrix, general_params, gw_params, advanced_params, solver_type_per_imp, G_loc_all=None):
     """
     Calculates the double counting, including all manipulations from advanced_params.
 
@@ -52,8 +51,14 @@ def calculate_double_counting(sum_k, density_matrix, general_params, advanced_pa
         List of density matrices for all inequivalent shells
     general_params : dict
         general parameters as a dict
+    gw_params : dict
+        GW parameters as a dict
     advanced_params : dict
         advanced parameters as a dict
+    solver_type_per_imp : list of str
+        List of solver types for each impurity
+    G_loc_all : list of BlockGf (Green's function) objects, optional
+        List of local Green's functions for all shells
 
     Returns
     --------
@@ -105,6 +110,87 @@ def calculate_double_counting(sum_k, density_matrix, general_params, advanced_pa
             Javg = 2*advanced_params['dc_J'][icrsh]
             sum_k.calc_dc(density_matrix_DC[icrsh], U_interact=Uavg, J_hund=Javg,
                           orb=icrsh, use_dc_formula=0)
+        # DC calculated for dynamic interaction from AIMBES
+        elif general_params['dc_type'][icrsh] in ('crpa_static', 'crpa_static_qp', 'crpa_dynamic'):
+            mpi.report('\n*** Using dynamic interactions to calculate DC ***')
+
+            # lad GW input from h5 file
+            if 'Uloc_dlr' not in gw_params:
+                if mpi.is_master_node():
+                    gw_data, ir_kernel = convert_gw_output(
+                        general_params['jobname'] + '/' + general_params['seedname'] + '.h5',
+                        gw_params['h5_file'],
+                        it_1e = gw_params['it_1e'],
+                        it_2e = gw_params['it_2e'],
+                        ha_ev_conv = True
+                    )
+                    gw_params.update(gw_data)
+                gw_params = mpi.bcast(gw_params)
+
+            mesh = MeshDLRImFreq(sum_k.mesh.beta, 'Fermion',
+                                 sum_k.mesh(sum_k.mesh.last_index()).value.imag, gw_params['Uloc_dlr'][icrsh].mesh.eps)
+            Gloc_dlr_iw = sum_k.block_structure.create_gf(ish=icrsh, space='sumk', mesh=mesh)
+
+            G_loc_sumk = sum_k.block_structure.convert_gf(G_loc_all[icrsh], ish_from=icrsh, space_from='solver', space_to='sumk')
+            for block, gf in Gloc_dlr_iw:
+                for iw in gf.mesh:
+                    gf[iw] = G_loc_sumk[block](iw)
+            Gloc_dlr = make_gf_dlr(Gloc_dlr_iw)
+
+            U_matrix_rot = {'up' : gw_params['U_matrix_rot'][icrsh], 'down' : gw_params['U_matrix_rot'][icrsh]}
+
+            # there are two options here evaluate DC from Wloc_GW and Uloc
+            # or Wloc_GG and Uloc (here GG means Wloc calculated via Gloc*Gloc)
+            Wloc_dlr = calc_W_from_Gloc(Gloc_dlr, U_matrix_rot)
+            Sig_DC_dlr, Sig_DC_hartree, Sig_DC_exchange = calc_Sigma_DC_gw(Wloc_dlr,
+                                                                           Gloc_dlr,
+                                                                           U_matrix_rot)
+            Sig_DC_iw = make_gf_imfreq(Sig_DC_dlr, n_iw=len(sum_k.mesh)//2)
+            Sig_DC_iw_dyn = Sig_DC_iw.copy()
+            for block, gf in Sig_DC_iw:
+                for iorb, jorb in itertools.product(range(gf.target_shape[0]), repeat=2):
+                    # create full freq dependent DC
+                    gf[iorb, jorb] += Sig_DC_hartree[block][iorb, jorb].real + Sig_DC_exchange[block][iorb, jorb].real
+
+            # dynamic interaction but static DC
+            if general_params['dc_type'][icrsh] == 'crpa_static':
+                # for the static DC form we follow doi.org/10.1103/PhysRevB.95.155104 Eq 31
+                # Sig_DC = Sig_DC_hartree + Sig_DC_exchange
+                for block, gf in Sig_DC_iw:
+                    Sig_DC_hartree[block] += Sig_DC_exchange[block]
+
+                    mpi.report(f'DC for imp {icrsh} block {block} via Σ_dc_HF + Σ_dc_ex:')
+                    mpi.report(Sig_DC_hartree[block].real)
+                # transform dc to sumk blocks
+                sum_k.dc_imp[icrsh] = Sig_DC_hartree
+
+            elif general_params['dc_type'][icrsh] == 'crpa_static_qp':
+                # for the static DC on top of GW we follow doi.org/10.1103/PhysRevB.95.155104 Eq 31
+                # Sig_DC = Sig_DC_hartree + Sig_DC_exchange + Sig_DC_iw(0)
+                mesh_w = MeshReFreq(window=(-0.5,0.5), n_w=101)
+                Sig_DC_w = sum_k.block_structure.create_gf(ish=icrsh, space='sumk', mesh=mesh_w)
+                for block, gf in Sig_DC_w:
+                    gf.set_from_pade(Sig_DC_iw[block], n_points=len(sum_k.mesh)//10, freq_offset=0.0001)
+                    Sig_DC_hartree[block] = 0.5*(Sig_DC_w[block](0.0) + Sig_DC_w[block](0.0).conj().T).real
+                    mpi.report(f'DC for imp {icrsh} block {block} via Σ_dc_HF + Σ_dc_ex:')
+                    mpi.report(Sig_DC_hartree[block].real)
+                # transform dc to sumk blocks
+                sum_k.dc_imp[icrsh] = Sig_DC_hartree
+
+            elif general_params['dc_type'][icrsh] == 'crpa_dynamic':
+                for block, gf in Sig_DC_iw:
+                    mpi.report(f'Full dynamic DC from cRPA for imp {icrsh} block {block} at iw_n=0:')
+                    mpi.report(gf(0).real)
+                    mpi.report(f'Full dynamic DC from cRPA for imp {icrsh} block {block} at iw_n=n:')
+                    mpi.report(gf.data[-1,:,:].real)
+                    Sig_DC_hartree[block] += Sig_DC_exchange[block]
+
+                # sum_k.dc_imp stores the sumk block structure version
+                sum_k.dc_imp[icrsh] = Sig_DC_hartree
+
+                # the dynamic part of DC is stored in different object
+                sum_k.dc_imp_dyn[icrsh] = Sig_DC_iw_dyn
+
         else:
             mpi.report(f'\nCalculating standard DC for impurity {icrsh} with U={advanced_params["dc_U"][icrsh]} and J={advanced_params["dc_J"][icrsh]}')
             sum_k.calc_dc(density_matrix_DC[icrsh], U_interact=advanced_params['dc_U'][icrsh],
@@ -350,7 +436,7 @@ def _set_loaded_sigma(sum_k, loaded_sigma, loaded_dc_imp, general_params):
     return start_sigma
 
 
-def determine_dc_and_initial_sigma(general_params, advanced_params, sum_k,
+def determine_dc_and_initial_sigma(general_params, gw_params, advanced_params, sum_k,
                                    archive, iteration_offset, G_loc_all, solvers,
                                    solver_type_per_imp):
     """
@@ -372,6 +458,8 @@ def determine_dc_and_initial_sigma(general_params, advanced_params, sum_k,
     ----------
     general_params : dict
         general parameters as a dict
+    gw_params : dict
+        GW parameters as a dict
     advanced_params : dict
         advanced parameters as a dict
     sum_k : SumkDFT object
@@ -402,7 +490,8 @@ def determine_dc_and_initial_sigma(general_params, advanced_params, sum_k,
             print('\nFrom previous calculation:', end=' ')
             start_sigma, sum_k.dc_imp, sum_k.dc_energ, last_g0,  _ = _load_sigma_from_h5(archive, -1)
             if general_params['csc'] and not general_params['dc_dmft']:
-                sum_k = calculate_double_counting(sum_k, density_mat_dft, general_params, advanced_params, solver_type_per_imp)
+                sum_k = calculate_double_counting(sum_k, density_mat_dft, general_params, gw_params,
+                                                  advanced_params, solver_type_per_imp, G_loc_all)
         # Loads Sigma from different calculation
         elif general_params['load_sigma']:
             print('\nFrom {}:'.format(general_params['path_to_sigma']), end=' ')
@@ -413,28 +502,27 @@ def determine_dc_and_initial_sigma(general_params, advanced_params, sum_k,
             # Recalculate double counting in case U, J or DC formula changed
             if general_params['dc']:
                 if general_params['dc_dmft']:
-                    sum_k = calculate_double_counting(sum_k, loaded_density_matrix,
-                                                      general_params, advanced_params,
-                                                      solver_type_per_imp)
+                    sum_k = calculate_double_counting(sum_k, loaded_density_matrix, general_params, gw_params,
+                                                      advanced_params, solver_type_per_imp, G_loc_all)
                 else:
-                    sum_k = calculate_double_counting(sum_k, density_mat_dft,
-                                                      general_params, advanced_params,
-                                                      solver_type_per_imp)
+                    sum_k = calculate_double_counting(sum_k, density_mat_dft, general_params, gw_params,
+                                                      advanced_params, solver_type_per_imp, G_loc_all)
 
             start_sigma = _set_loaded_sigma(sum_k, loaded_sigma, loaded_dc_imp, general_params)
 
         # Sets DC as Sigma because no initial Sigma given
-        elif general_params['dc'] and general_params['dc_type'] not in (5,6):
-            sum_k = calculate_double_counting(sum_k, density_mat_dft,
-                                              general_params, advanced_params,
-                                              solver_type_per_imp)
+        elif general_params['dc']:
+            sum_k = calculate_double_counting(sum_k, density_mat_dft, general_params, gw_params,
+                                              advanced_params, solver_type_per_imp, G_loc_all)
 
             # initialize Sigma from sum_k
             start_sigma = [sum_k.block_structure.create_gf(ish=iineq, gf_function=Gf, space='solver',
                                                            mesh=sum_k.mesh)
                            for iineq in range(sum_k.n_inequiv_shells)]
             for icrsh in range(sum_k.n_inequiv_shells):
-                dc_value = sum_k.dc_imp[sum_k.inequiv_to_corr[icrsh]][sum_k.spin_block_names[sum_k.SO][0]][0, 0]
+                dc_pot = sum_k.block_structure.convert_matrix(sum_k.dc_imp[sum_k.inequiv_to_corr[icrsh]],
+                                                               ish_from=sum_k.inequiv_to_corr[icrsh],
+                                                               space_from='sumk', space_to='solver')
 
                 if (general_params['magnetic'] and general_params['magmom'] and sum_k.SO == 0):
                     # if we are doing a magnetic calculation and initial magnetic moments
@@ -445,95 +533,12 @@ def determine_dc_and_initial_sigma(general_params, advanced_params, sum_k,
                     # if magmom positive the up channel will be favored
                     for spin_channel in sum_k.gf_struct_solver[icrsh].keys():
                         if 'up' in spin_channel:
-                            start_sigma[icrsh][spin_channel] << -fac + dc_value
+                            start_sigma[icrsh][spin_channel] << -fac + dc_pot[spin_channel]
                         else:
-                            start_sigma[icrsh][spin_channel] << fac + dc_value
+                            start_sigma[icrsh][spin_channel] << fac + dc_pot[spin_channel]
                 else:
-                    start_sigma[icrsh] << dc_value
-        elif general_params['dc'] and general_params['dc_type'] in (5,6):
-            mpi.report(f'\n*** Using dynamic interactions to calculate DC ***')
-            assert general_params['gw_code'] == 'bdft'
-            start_sigma = [sum_k.block_structure.create_gf(ish=iineq, space='solver', mesh=sum_k.mesh)
-                for iineq in range(sum_k.n_inequiv_shells)]
-            for icrsh in range(sum_k.n_inequiv_shells):
-                mesh = MeshDLRImFreq(beta=general_params['Uloc_dlr'][icrsh].mesh.beta,
-                                     statistic='Fermion',
-                                     w_max=general_params['Uloc_dlr'][icrsh].mesh.w_max,
-                                     eps=general_params['Uloc_dlr'][icrsh].mesh.eps)
-                Gloc_dlr_iw = sum_k.block_structure.create_gf(ish=icrsh, space='solver', mesh=mesh)
-                for block, gf in Gloc_dlr_iw:
-                    for iw in gf.mesh:
-                        gf[iw] = G_loc_all[icrsh][block](iw)
-                Gloc_dlr = make_gf_dlr(Gloc_dlr_iw)
-
-                # rotate Wloc and Vloc to solver space
-                ish = sum_k.inequiv_to_corr[icrsh]
-                # Vloc_rot = {}
-                Uloc_rot = {}
-                Uloc_0 = make_gf_imfreq(general_params['Uloc_dlr'][icrsh]['up_0'],1).data[0,:,:,:,:] + general_params['Vloc'][icrsh]['up_0']
-                for block, gf in Gloc_dlr_iw:
-                    # Vloc_rot[block] = util.transform_U_matrix(general_params['Vloc'][icrsh][block], sum_k.rot_mat[ish].T)
-                    Uloc_rot[block] = util.transform_U_matrix(Uloc_0, sum_k.rot_mat[ish].T).real
-                    # for coeff in gf.mesh:
-                    #     # Transposes rotation matrix here because TRIQS has a slightly different definition
-                    #     Wloc_rot[block][coeff] = util.transform_U_matrix(general_params['Wloc_dlr'][icrsh][block][coeff], sum_k.rot_mat[ish].T)
-                # there are two options here evaluate DC from Wloc_GW and Uloc
-                # or Wloc_GG and Uloc (here GG means Wloc calculated via Gloc*Gloc)
-                Wloc_dlr = calc_W_from_Gloc(Gloc_dlr, Uloc_rot)
-                Sig_DC_dlr, Sig_DC_hartree, Sig_DC_exchange = calc_Sigma_DC_gw(Wloc_dlr,
-                                                                               Gloc_dlr,
-                                                                               Uloc_rot)
-                Sig_DC_iw = make_gf_imfreq(Sig_DC_dlr, n_iw=len(sum_k.mesh)//2)
-                for block, gf in Sig_DC_iw:
-                    for iorb, jorb in itertools.product(range(gf.target_shape[0]), repeat=2):
-                    # create full freq dependent DC and ignore off-diag terms for now
-                        if iorb == jorb:
-                            gf[iorb, jorb] += Sig_DC_hartree[block][iorb, jorb].real + Sig_DC_exchange[block][iorb, jorb].real
-                        else:
-                            gf[iorb, jorb] << 0.0+0.0j
-
-
-                # dynamic interaction but static DC
-                if general_params['dc_type'] == 5:
-                    # for the static DC form we follow doi.org/10.1103/PhysRevB.95.155104 Eq 31
-                    # Sig_DC = Sig_DC_hartree + Sig_DC_iw(0)
-                    mesh_w = MeshReFreq(window=(-0.5,0.5), n_w=101)
-                    Sig_DC_w = sum_k.block_structure.create_gf(ish=icrsh, space='solver', mesh=mesh_w)
-                    for block, gf in Sig_DC_w:
-                        gf.set_from_pade(Sig_DC_iw[block], n_points=len(sum_k.mesh)//10, freq_offset=0.0001)
-                        # option 1 all DC terms
-                        Sig_DC_hartree[block] = Sig_DC_w[block](0.0).real
-                        # option 2 only static terms!
-                        # Sig_DC_hartree[block] += Sig_DC_exchange[block]
-
-                        mpi.report(f'DC for imp {icrsh} block {block}:')
-                        mpi.report(Sig_DC_hartree[block].real)
-                    # transform dc to sumk blocks
-                    sum_k.dc_imp[icrsh] = sum_k.block_structure.convert_matrix(Sig_DC_hartree,
-                                                                               ish_from=sum_k.inequiv_to_corr[icrsh],
-                                                                               space_from='solver', space_to='sumk')
-                    for block, gf in start_sigma[icrsh]:
-                        gf << Sig_DC_hartree[block]
-                # dynamic interaction and dynamic DC (dc_type==6)
-                else:
-                    for block, gf in Sig_DC_iw:
-                        mpi.report(f'DC for imp {icrsh} block {block} at iw_n=0:')
-                        mpi.report(gf(0).real)
-                    for block, gf in Sig_DC_iw:
-                        mpi.report(f'DC for imp {icrsh} block {block} at iw_n=n:')
-                        mpi.report(gf.data[-1,:,:].real)
-                        Sig_DC_hartree[block] = Sig_DC_hartree[block].real + Sig_DC_exchange[block].real
-                    # sum_k.dc_imp stores the sumk block structure version
-                    sum_k.dc_imp[icrsh] = sum_k.block_structure.convert_matrix(Sig_DC_hartree,
-                                                                           ish_from=sum_k.inequiv_to_corr[icrsh],
-                                                                           space_from='solver', space_to='sumk')
-                    # sum_k.dc_imp[icrsh] = sum_k.block_structure.convert_gf(Sig_DC_iw,
-                    #                                                        ish_from=sum_k.inequiv_to_corr[icrsh],
-                    #                                                        space_from='solver', space_to='sumk')
-                    # start sigma is given in solver structure
-                    start_sigma[icrsh] = Sig_DC_iw
-                    # for block, gf in start_sigma[icrsh]:
-                    #     gf << Sig_DC_hartree[block] + Sig_DC_exchange[block]
+                    for spin_channel in sum_k.gf_struct_solver[icrsh].keys():
+                        start_sigma[icrsh][spin_channel] << dc_pot[spin_channel]
 
         # Sets Sigma to zero because neither initial Sigma nor DC given
         elif (not general_params['dc'] and general_params['magnetic']):

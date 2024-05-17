@@ -25,11 +25,12 @@
 import numpy as np
 from itertools import product
 
-from triqs.gf import MeshImTime, MeshReTime, MeshDLRImFreq, MeshReFreq, MeshLegendre, Gf, BlockGf, make_gf_imfreq, make_hermitian, Omega, iOmega_n, make_gf_from_fourier, make_gf_dlr, fit_gf_dlr, make_gf_dlr_imtime
+from triqs.gf import MeshImTime, MeshReTime, MeshDLRImFreq, MeshReFreq, MeshLegendre, Gf, BlockGf, make_gf_imfreq, make_hermitian, Omega, iOmega_n, make_gf_from_fourier, make_gf_dlr, fit_gf_dlr, make_gf_dlr_imtime, make_gf_imtime
 from triqs.gf.tools import inverse, make_zero_tail
 from triqs.gf.descriptors import Fourier
 from triqs.operators import c_dag, c, Operator, util
 from triqs.operators.util.U_matrix import reduce_4index_to_2index
+from triqs.operators.util.extractors import block_matrix_from_op
 import triqs.utility.mpi as mpi
 import itertools
 from h5 import HDFArchive
@@ -118,7 +119,7 @@ class SolverStructure:
         solve impurity problem
     '''
 
-    def __init__(self, general_params, solver_params, advanced_params, sum_k,
+    def __init__(self, general_params, solver_params, gw_params, advanced_params, sum_k,
                  icrsh, h_int, iteration_offset=None, deg_orbs_ftps=None):
         r'''
         Initialisation of the solver instance with h_int for impurity "icrsh" based on soliDMFT parameters.
@@ -141,6 +142,7 @@ class SolverStructure:
 
         self.general_params = general_params
         self.solver_params = solver_params
+        self.gw_params = gw_params
         self.advanced_params = advanced_params
         self.sum_k = sum_k
         self.icrsh = icrsh
@@ -268,8 +270,9 @@ class SolverStructure:
         self.Delta_time = self.G_time.copy()
 
         # create all Legendre instances
-        if (self.solver_params['type'] in ['cthyb', 'ctseg']
+        if (self.solver_params['type'] in ['cthyb']
                 and (self.solver_params['measure_G_l'] or self.solver_params['legendre_fit'])
+                or self.solver_params['type'] == 'ctseg' and self.solver_params['legendre_fit']
                 or self.solver_params['type'] == 'hubbardI' and self.solver_params['measure_G_l']):
 
             self.n_l = self.solver_params['n_l']
@@ -280,7 +283,7 @@ class SolverStructure:
             # move original G_freq to G_freq_orig
             self.G_time_orig = self.G_time.copy()
 
-        if self.solver_params['type'] in ['cthyb'] and self.solver_params['crm_dyson_solver']:
+        if self.solver_params['type'] in ['cthyb', 'ctseg'] and self.solver_params['crm_dyson_solver']:
             self.G_time_dlr = None
             self.Sigma_dlr = None
 
@@ -374,7 +377,7 @@ class SolverStructure:
                 self.triqs_solver.G0_iw << make_hermitian(self.G0_freq)
 
             # update solver in h5 archive one last time for debugging if solve command crashes
-            if mpi.is_master_node():
+            if self.general_params['store_solver'] and mpi.is_master_node():
                 with HDFArchive(self.general_params['jobname']+'/'+self.general_params['seedname']+'.h5', 'a') as archive:
                     if not 'it_-1' in archive['DMFT_input/solver']:
                         archive['DMFT_input/solver'].create_group('it_-1')
@@ -387,8 +390,6 @@ class SolverStructure:
                     archive['DMFT_input/solver/it_-1'][f'solve_params_{self.icrsh}'] = prep_params_for_h5(self.solver_params)
                     archive['DMFT_input/solver/it_-1'][f'triqs_solver_params_{self.icrsh}'] = prep_params_for_h5(self.triqs_solver_params)
                     archive['DMFT_input/solver/it_-1']['mpi_size'] = mpi.size
-                    if self.general_params['store_solver']:
-                        archive['DMFT_input/solver/it_-1'][f'S_{self.icrsh}'] = self.triqs_solver
             mpi.barrier()
 
             # Solve the impurity problem for icrsh shell
@@ -609,55 +610,71 @@ class SolverStructure:
 
         if self.solver_params['type'] == 'ctseg':
             # fill G0_freq from sum_k to solver
-            for block, gf in self.G0_freq:
-                for i, j in itertools.product(range(gf.target_shape[0]), range(gf.target_shape[1])):
-                    if i == j:
-                        self.triqs_solver.G0_iw[block][i,j] << gf[i,j]
-                    else:
-                        self.triqs_solver.G0_iw[block][i,j] << 0.0+0.0j
+            self.triqs_solver.Delta_tau << self.Delta_time
+            # extract hartree shift per orbital for solver
+            hloc_0_bm = block_matrix_from_op(self.Hloc_0, self.sum_k.gf_struct_solver_list[self.icrsh])
+            hartree_shift = []
+            for block in hloc_0_bm:
+                for iorb in range(block.shape[0]):
+                    # minus sign here as the solver treats the term as chemical potential and not Hloc0
+                    hartree_shift.append(-block[iorb,iorb].real)
+            mpi.report('hartree_shift:', hartree_shift)
 
-            if self.general_params['h_int_type'][self.icrsh] in ('dyn_density_density'):
+            if self.general_params['h_int_type'][self.icrsh] == 'dyn_density_density':
                 mpi.report('add dynamic interaction from bdft')
                 # convert 4 idx tensor to two index tensor
                 ish = self.sum_k.inequiv_to_corr[self.icrsh]
                 # prepare dynamic 2 idx parts
-                Uloc_dlr = self.general_params['Uloc_dlr'][self.icrsh]['up_0']
+                Uloc_dlr = self.gw_params['Uloc_dlr'][self.icrsh]['up']
                 Uloc_dlr_2idx = Gf(mesh=Uloc_dlr.mesh, target_shape=[Uloc_dlr.target_shape[0],Uloc_dlr.target_shape[1]])
                 Uloc_dlr_2idx_prime = Gf(mesh=Uloc_dlr.mesh, target_shape=[Uloc_dlr.target_shape[0],Uloc_dlr.target_shape[1]])
 
-                # Vloc_rot = util.transform_U_matrix(self.general_params['Vloc'][self.icrsh]['up_0'],
-                #                                    self.sum_k.rot_mat[ish].T)
-                # V, Vprime = reduce_4index_to_2index(Vloc_rot)
-
                 for coeff in Uloc_dlr.mesh:
                     # Transposes rotation matrix here because TRIQS has a slightly different definition
-                    Uloc_dlr_rot_idx = util.transform_U_matrix(Uloc_dlr[coeff], self.sum_k.rot_mat[ish].T)
-                    U, Uprime = reduce_4index_to_2index(Uloc_dlr_rot_idx)
+                    if self.sum_k.use_rotations:
+                        Uloc_dlr_idx = util.transform_U_matrix(Uloc_dlr[coeff], self.sum_k.rot_mat[ish].T)
+                    else:
+                        Uloc_dlr_idx = Uloc_dlr[coeff]
+                    U, Uprime = reduce_4index_to_2index(Uloc_dlr_idx)
                     # apply rot mat here
                     Uloc_dlr_2idx[coeff] = U
                     Uloc_dlr_2idx_prime[coeff] = Uprime
 
                 # create full frequency objects
-                Uloc_iw_2idx = make_gf_imfreq(Uloc_dlr_2idx, n_iw=self.general_params['n_w_b_nn'])
-                Uloc_iw_2idx_prime = make_gf_imfreq(Uloc_dlr_2idx_prime, n_iw=self.general_params['n_w_b_nn'])
-                mpi.report(f"High frequency limit of U'(iwn) (should be close to 0):")
-                mpi.report(Uloc_iw_2idx_prime(Uloc_iw_2idx_prime.mesh.last_index()).real)
+                Uloc_tau_2idx = make_gf_imtime(Uloc_dlr_2idx, n_tau=self.solver_params['n_tau_k'])
+                Uloc_tau_2idx_prime = make_gf_imtime(Uloc_dlr_2idx_prime, n_tau=self.solver_params['n_tau_k'])
 
-                for b1, b2 in product(self.sum_k.gf_struct_solver_dict[self.icrsh].keys(), repeat=2):
-                    if b1 == b2:
-                        # cast to real here for now
-                        self.triqs_solver.D0_iw[b1+"|"+b2] << Uloc_iw_2idx.real
-                        # if same spin and same orb we have to add the Uloc_iw_2idx_prime value:
-                        for iorb in range(Uloc_iw_2idx.target_shape[0]):
-                            self.triqs_solver.D0_iw[b1+"|"+b2][iorb, iorb] += Uloc_iw_2idx_prime[iorb, iorb].real
-                    else:
-                        self.triqs_solver.D0_iw[b1+"|"+b2] << Uloc_iw_2idx_prime.real
+                # fill D0_tau from Uloc_tau_2idx and Uloc_tau_2idx_prime
+                norb = Uloc_dlr.target_shape[0]
+                # same spin interaction
+                self.triqs_solver.D0_tau[0:norb, 0:norb] << Uloc_tau_2idx.real
+                self.triqs_solver.D0_tau[norb:2*norb, norb:2*norb] << Uloc_tau_2idx.real
+                # opposite spin interaction
+                self.triqs_solver.D0_tau[0:norb, norb:2*norb] << Uloc_tau_2idx_prime.real
+                self.triqs_solver.D0_tau[norb:2*norb, 0:norb] << Uloc_tau_2idx_prime.real
+
+                # TODO: add Jerp_Iw to the solver
 
                 # self.triqs_solver. Jperp_iw << make_gf_imfreq(Uloc_dlr_2idx, n_iw=self.general_params['n_w_b_nn']) + V
             mpi.report('\nLocal interaction Hamiltonian is:',self.h_int)
+
+            # update solver in h5 archive one last time for debugging if solve command crashes
+            if self.general_params['store_solver'] and mpi.is_master_node():
+                with HDFArchive(self.general_params['jobname']+'/'+self.general_params['seedname']+'.h5', 'a') as archive:
+                    if 'it_-1' not in archive['DMFT_input/solver']:
+                        archive['DMFT_input/solver'].create_group('it_-1')
+                    archive['DMFT_input/solver/it_-1'][f'S_{self.icrsh}'] = self.triqs_solver
+                    archive['DMFT_input/solver/it_-1'][f'Delta_time_{self.icrsh}'] = self.triqs_solver.Delta_tau
+                    archive['DMFT_input/solver/it_-1'][f'solve_params_{self.icrsh}'] = prep_params_for_h5(self.solver_params)
+                    archive['DMFT_input/solver/it_-1'][f'triqs_solver_params_{self.icrsh}'] = prep_params_for_h5(self.triqs_solver_params)
+                    archive['DMFT_input/solver/it_-1']['mpi_size'] = mpi.size
+                    if self.general_params['h_int_type'][self.icrsh] == 'dyn_density_density':
+                        archive['DMFT_input/solver/it_-1'][f'Uloc_dlr_2idx_{self.icrsh}'] = Uloc_dlr_2idx
+                        archive['DMFT_input/solver/it_-1'][f'Uloc_dlr_2idx_prime_{self.icrsh}'] = Uloc_dlr_2idx_prime
+            mpi.barrier()
             # Solve the impurity problem for icrsh shell
             # *************************************
-            self.triqs_solver.solve(h_int=self.h_int, **self.triqs_solver_params)
+            self.triqs_solver.solve(h_int=self.h_int, hartree_shift=hartree_shift, **self.triqs_solver_params)
             # *************************************
 
             # call postprocessing
@@ -881,21 +898,21 @@ class SolverStructure:
 
         # Separately stores all params that go into solve() call of solver
         self.triqs_solver_params = {}
-        keys_to_pass = ('improved_estimator', 'length_cycle', 'max_time', 'measure_pert_order', 'n_warmup_cycles')
+        keys_to_pass = ('length_cycle', 'max_time', 'measure_statehist', 'measure_nnt')
         for key in keys_to_pass:
             self.triqs_solver_params[key] = self.solver_params[key]
 
         # Calculates number of sweeps per rank
         self.triqs_solver_params['n_cycles'] = int(self.solver_params['n_cycles_tot'] / mpi.size)
+        # cast warmup cycles to int in case given in scientific notation
+        self.triqs_solver_params['n_warmup_cycles'] = int(self.solver_params['n_warmup_cycles'])
 
         # Rename parameters that are differentin ctseg than cthyb
         self.triqs_solver_params['measure_gt'] = self.solver_params['measure_G_tau']
-        self.triqs_solver_params['measure_gw'] = self.solver_params['measure_G_iw']
-        self.triqs_solver_params['measure_gl'] = self.solver_params['measure_G_l']
-        self.triqs_solver_params['measure_hist'] = self.solver_params['measure_pert_order']
+        self.triqs_solver_params['measure_perturbation_order_histograms'] = self.solver_params['measure_pert_order']
 
         # Makes sure measure_gw is true if improved estimators are used
-        if self.triqs_solver_params['improved_estimator']:
+        if self.solver_params['improved_estimator']:
             self.triqs_solver_params['measure_gt'] = True
             self.triqs_solver_params['measure_ft'] = True
         else:
@@ -904,18 +921,9 @@ class SolverStructure:
 
         gf_struct = self.sum_k.gf_struct_solver_list[self.icrsh]
         # Construct the triqs_solver instances
-        if self.solver_params['measure_gl']:
-            triqs_solver = ctseg_solver(beta=self.general_params['beta'], gf_struct=gf_struct,
-                            n_iw=self.general_params['n_iw'], n_tau=self.general_params['n_tau'],
-                            n_legendre_g=self.solver_params['n_l'],
-                            n_w_b_nn = self.solver_params['n_w_b_nn'],
-                            n_tau_k=int(self.solver_params['n_w_b_nn']*2.5), n_tau_jperp=int(self.solver_params['n_w_b_nn']*2.5))
-        else:
-            triqs_solver = ctseg_solver(beta=self.general_params['beta'], gf_struct=gf_struct,
-                            n_iw=self.general_params['n_iw'], n_tau=self.general_params['n_tau'],
-                            n_w_b_nn = self.general_params['n_w_b_nn'], n_tau_k=int(self.general_params['n_w_b_nn']*2.5),
-                            n_tau_jperp=int(self.general_params['n_w_b_nn']*2.5))
-
+        triqs_solver = ctseg_solver(beta=self.general_params['beta'], gf_struct=gf_struct,
+                        n_tau=self.general_params['n_tau'],
+                        n_tau_k=int(self.solver_params['n_tau_k']))
         return triqs_solver
 
     def _create_ftps_solver(self):
@@ -1039,7 +1047,6 @@ class SolverStructure:
                         for iwn in mesh_dlr_iw:
                             gf[iwn] = self.G0_freq[block](iwn)
                     self.sum_k.symm_deg_gf(G0_dlr_iw, ish=self.icrsh)
-                    G0_dlr = make_gf_dlr(G0_dlr_iw)
 
                     # average moments
                     self.sum_k.symm_deg_gf(self.triqs_solver.Sigma_Hartree, ish=self.icrsh)
@@ -1053,39 +1060,36 @@ class SolverStructure:
                         mom[1] = first_mom[block]
 
                     # minimize dyson for the first entry of each deg shell
-                    Sigma_dlr = self.sum_k.block_structure.create_gf(ish=self.icrsh, gf_function=Gf, mesh=G_dlr.mesh, space='solver')
+                    self.Sigma_dlr = self.sum_k.block_structure.create_gf(ish=self.icrsh, gf_function=Gf, mesh=mesh_dlr_iw, space='solver')
                     # without any degenerate shells we run the minimization for all blocks
                     if self.sum_k.deg_shells[self.icrsh] == []:
-                        for block, gf in Sigma_dlr:
+                        for block, gf in self.Sigma_dlr:
                             np.random.seed(85281)
                             print('Minimizing Dyson via CRM for Σ[block]:', block)
-                            gf, min_res = minimize_dyson(G0_tau=G0_dlr[block],
-                                                         G_tau=G_dlr[block],
-                                                         Sigma_moments=self.triqs_solver.Sigma_moments[block],
-                                                         verbose=True
-                                                        )
+                            gf, _, _ = minimize_dyson(G0_dlr=G0_dlr_iw[block],
+                                                      G_dlr=G_dlr[block],
+                                                      Sigma_moments=self.triqs_solver.Sigma_moments[block]
+                                                      )
                     else:
                         for deg_shell in self.sum_k.deg_shells[self.icrsh]:
                             for i, block in enumerate(deg_shell):
                                 if i == 0:
                                     np.random.seed(85281)
                                     print('Minimizing Dyson via CRM for Σ[block]:', block)
-                                    Sigma_dlr[block], min_res = minimize_dyson(G0_tau=G0_dlr[block],
-                                                                        G_tau=G_dlr[block],
-                                                                        Sigma_moments=self.triqs_solver.Sigma_moments[block],
-                                                                        verbose=True
-                                                                        )
+                                    self.Sigma_dlr[block], _, _ = minimize_dyson(G0_dlr=G0_dlr_iw[block],
+                                                                                 G_dlr=G_dlr[block],
+                                                                                 Sigma_moments=self.triqs_solver.Sigma_moments[block]
+                                                                                 )
                                     sol_block = block
                                 else:
-                                    Sigma_dlr[block] << Sigma_dlr[sol_block]
+                                    self.Sigma_dlr[block] << self.Sigma_dlr[sol_block]
 
                                     print(f'Copying result from first block of deg list to {block}')
                     print('\n')
 
-                    self.Sigma_freq = make_gf_imfreq(Sigma_dlr, n_iw=self.general_params['n_iw'])
+                    self.Sigma_freq = make_gf_imfreq(self.Sigma_dlr, n_iw=self.general_params['n_iw'])
                     for block, gf in self.Sigma_freq:
                         gf += self.triqs_solver.Sigma_moments[block][0]
-                    self.Sigma_dlr = Sigma_dlr
 
                 mpi.barrier()
                 self.Sigma_freq = mpi.bcast(self.Sigma_freq)
@@ -1287,7 +1291,7 @@ class SolverStructure:
 
         def set_Gs_from_G_l():
 
-            if self.solver_params['measure_ft'] and mpi.is_master_node():
+            if self.solver_params['improved_estimator'] and mpi.is_master_node():
                 print('\n !!!!WARNING!!!! \n you enabled both improved estimators and legendre based filtering / sampling. Sigma will be overwritten by legendre result.  \n !!!!WARNING!!!!\n')
 
             # create new G_freq and G_time
@@ -1308,51 +1312,42 @@ class SolverStructure:
 
         # first print average sign
         if mpi.is_master_node():
-            print('\nAverage sign: {}'.format(self.triqs_solver.average_sign))
+            print('\nAverage sign: {}'.format(self.triqs_solver.results.sign))
         # get Delta_time from solver
         self.Delta_time << self.triqs_solver.Delta_tau
 
-        self.G_time << self.triqs_solver.G_tau
+        self.G_time << self.triqs_solver.results.G_tau
         self.sum_k.symm_deg_gf(self.G_time, ish=self.icrsh)
 
-        if self.solver_params['measure_gw']:
-            self.G_freq << self.triqs_solver.G_iw
-        else:
-            if mpi.is_master_node():
-                # create empty moment container (list of np.arrays)
-                Gf_known_moments = make_zero_tail(self.G_freq,n_moments=2)
-                for i, bl in enumerate(self.G_freq.indices):
-                    # 0 moment is 0, dont touch it, but first moment is 1 for the Gf
-                    Gf_known_moments[i][1] = np.eye(self.G_freq[bl].target_shape[0])
-                    self.G_freq[bl] << Fourier(self.G_time[bl], Gf_known_moments[i])
-            self.G_freq << mpi.bcast(self.G_freq)
+        if mpi.is_master_node():
+            # create empty moment container (list of np.arrays)
+            Gf_known_moments = make_zero_tail(self.G_freq,n_moments=2)
+            for i, bl in enumerate(self.G_freq.indices):
+                # 0 moment is 0, dont touch it, but first moment is 1 for the Gf
+                Gf_known_moments[i][1] = np.eye(self.G_freq[bl].target_shape[0])
+                self.G_freq[bl] << Fourier(self.G_time[bl], Gf_known_moments[i])
+        self.G_freq << mpi.bcast(self.G_freq)
 
         self.G_freq << make_hermitian(self.G_freq)
         self.G_freq_unsym << self.G_freq
         self.sum_k.symm_deg_gf(self.G_freq, ish=self.icrsh)
 
         # if measured in Legendre basis, get G_l from solver too
-        if self.solver_params['measure_gl']:
-            # store original G_time into G_time_orig
-            self.G_time_orig << self.triqs_solver.G_tau
-            self.G_l << self.triqs_solver.G_l
-            # get G_time, G_freq, Sigma_freq from G_l
-            set_Gs_from_G_l()
-        elif self.solver_params['legendre_fit']:
-            self.G_time_orig << self.triqs_solver.G_tau
+        if self.solver_params['legendre_fit']:
+            self.G_time_orig << self.triqs_solver.results.G_tau
             self.G_l << legendre_filter.apply(self.G_time, self.solver_params['n_l'])
             # get G_time, G_freq, Sigma_freq from G_l
             set_Gs_from_G_l()
         # if improved estimators are turned on calc Sigma from F_tau, otherwise:
-        elif self.solver_params['measure_ft']:
+        elif self.solver_params['improved_estimator']:
             self.F_freq = self.G_freq.copy()
             self.F_freq << 0.0
             self.F_time = self.G_time.copy()
-            self.F_time << self.triqs_solver.F_tau
+            self.F_time << self.triqs_solver.results.F_tau
             F_known_moments = make_zero_tail(self.F_freq, n_moments=1)
             if mpi.is_master_node():
                 for i, bl in enumerate(self.F_freq.indices):
-                    self.F_freq[bl] << Fourier(self.triqs_solver.F_tau[bl], F_known_moments[i])
+                    self.F_freq[bl] << Fourier(self.triqs_solver.results.F_tau[bl], F_known_moments[i])
                 # fit tail of improved estimator and G_freq
                 self.F_freq << _gf_fit_tail_fraction(self.F_freq, fraction=0.9, replace=0.5, known_moments=F_known_moments)
                 self.G_freq << _gf_fit_tail_fraction(self.G_freq ,fraction=0.9, replace=0.5, known_moments=Gf_known_moments)
@@ -1363,12 +1358,78 @@ class SolverStructure:
                 for iw in fw.mesh:
                     self.Sigma_freq[block][iw] = self.F_freq[block][iw] / self.G_freq[block][iw]
 
+        elif self.solver_params['crm_dyson_solver']:
+            from triqs.gf.dlr_crm_dyson_solver import minimize_dyson
+
+            mpi.report('\nCRM Dyson solver to extract Σ impurity\n')
+            # fit QMC G_tau to DLR
+            if mpi.is_master_node():
+                G_dlr = fit_gf_dlr(self.triqs_solver.results.G_tau,
+                                   w_max=self.general_params['dlr_wmax'], eps=self.general_params['dlr_eps'])
+                self.G_time_dlr = make_gf_dlr_imtime(G_dlr)
+                self.G_freq = make_gf_imfreq(G_dlr, n_iw=self.general_params['n_iw'])
+
+                # assume little error on G0_iw and use to get G0_dlr
+                mesh_dlr_iw = MeshDLRImFreq(G_dlr.mesh)
+                G0_dlr_iw = self.sum_k.block_structure.create_gf(ish=self.icrsh, gf_function=Gf, mesh=mesh_dlr_iw, space='solver')
+                for block, gf in G0_dlr_iw:
+                    for iwn in mesh_dlr_iw:
+                        gf[iwn] = self.G0_freq[block](iwn)
+                self.sum_k.symm_deg_gf(G0_dlr_iw, ish=self.icrsh)
+                G0_dlr = make_gf_dlr(G0_dlr_iw)
+
+                # get Hartree shift for optimizer
+                G0_iw = make_gf_imfreq(G0_dlr, n_iw=self.general_params['n_iw'])
+                G_iw = make_gf_imfreq(G_dlr, n_iw=self.general_params['n_iw'])
+                Sigma_iw = inverse(G0_iw) - inverse(G_iw)
+
+                # minimize dyson for the first entry of each deg shell
+                self.Sigma_dlr = self.sum_k.block_structure.create_gf(ish=self.icrsh, gf_function=Gf, mesh=mesh_dlr_iw, space='solver')
+                # without any degenerate shells we run the minimization for all blocks
+                if self.sum_k.deg_shells[self.icrsh] == []:
+                    for block, gf in self.Sigma_dlr:
+                        tail, err = gf.fit_hermitian_tail()
+                        np.random.seed(85281)
+                        print('Minimizing Dyson via CRM for Σ[block]:', block)
+                        gf, _, _ = minimize_dyson(G0_dlr=G0_dlr_iw[block],
+                                                  G_dlr=G_dlr[block],
+                                                  Sigma_moments=tail[0:1]
+                                                    )
+                else:
+                    for deg_shell in self.sum_k.deg_shells[self.icrsh]:
+                        for i, block in enumerate(deg_shell):
+                            if i == 0:
+                                tail, err = Sigma_iw[block].fit_hermitian_tail()
+                                np.random.seed(85281)
+                                print('Minimizing Dyson via CRM for Σ[block]:', block)
+                                self.Sigma_dlr[block], _, _ = minimize_dyson(G0_dlr=G0_dlr_iw[block],
+                                                                    G_dlr=G_dlr[block],
+                                                                    Sigma_moments=tail[0:1]
+                                                                    )
+                                sol_block = block
+                            else:
+                                print(f'Copying result from first block of deg list to {block}')
+                                self.Sigma_dlr[block] << self.Sigma_dlr[sol_block]
+
+                            self.Sigma_freq[block] = make_gf_imfreq(self.Sigma_dlr[block], n_iw=self.general_params['n_iw'])
+                            self.Sigma_freq[block] += tail[0]
+                print('\n')
+
+
+            mpi.barrier()
+            self.Sigma_freq = mpi.bcast(self.Sigma_freq)
+            self.Sigma_dlr = mpi.bcast(self.Sigma_dlr)
+            self.G_time_dlr = mpi.bcast(self.G_time_dlr)
+            self.G_freq = mpi.bcast(self.G_freq)
         else:
-            mpi.report('\n!!!! WARNING !!!! tail of solver output not handled! Turn on either measure_ft, legendre_fit, or measure_gl\n')
+            mpi.report('\n!!!! WARNING !!!! tail of solver output not handled! Turn on either measure_ft, legendre_fit\n')
             self.Sigma_freq << inverse(self.G0_freq) - inverse(self.G_freq)
 
 
-        if self.solver_params['measure_hist']:
-            self.perturbation_order = self.triqs_solver.histogram
+        if self.solver_params['measure_statehist']:
+            self.state_histogram = self.triqs_solver.results.state_hist
+
+        if self.solver_params['measure_pert_order']:
+            self.perturbation_order_histo  = self.triqs_solver.results.perturbation_order_histo_Delta
 
         return

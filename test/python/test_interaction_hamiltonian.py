@@ -22,7 +22,7 @@ class test_interaction_hamiltonian(unittest.TestCase):
         general_params = {}
         gw_params = {'code' : 'Vasp'}
 
-        crpa_matrix = _load_crpa_interaction_matrix(sum_k, general_params, gw_params, 'UIJKL')
+        crpa_matrix, _ = _load_crpa_interaction_matrix(sum_k, general_params, gw_params, 'UIJKL')
 
         assert [c.shape for c in crpa_matrix] == [(5, 5, 5, 5), (5, 5, 5, 5)]
 

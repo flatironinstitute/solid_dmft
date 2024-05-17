@@ -129,7 +129,7 @@ def run_dmft(params, config_file_name=None):
 
         # Runs dmft_cycle
         dmft_cycle(general_params, solver_params, advanced_params,
-                   dft_params, general_params['n_iter_dmft'])
+                   dft_params, gw_params, general_params['n_iter_dmft'])
 
     mpi.barrier()
     if mpi.is_master_node():

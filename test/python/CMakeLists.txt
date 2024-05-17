@@ -11,7 +11,6 @@ set(basic_tests
     test_matheval
     test_plot_correlated_bands
     test_respack_sfo
-    test_gw_embedding
     )
 
   # copy input files for PCB test from documentation tutorial
@@ -42,9 +41,6 @@ set (integration_tests
      lno_hubbardI_mag
      svo_cthyb_basic_crm
      svo_cthyb_basic_tf
-     svo_cthyb_crpa
-     svo_ctseg_dyn
-     svo_gw_emb_stat
      lco_ftps
      nio_cthyb_hartree
      )
@@ -61,7 +57,7 @@ foreach(test ${integration_tests})
 
   add_test(NAME ${test}
            # COMMAND bash ${test}.sh
-           COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_PREFLAGS} ${TRIQS_PYTHON_EXECUTABLE} test.py
+           COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${MPIEXEC_MAX_NUMPROCS} ${MPIEXEC_PREFLAGS} ${TRIQS_PYTHON_EXECUTABLE} test.py
            # COMMAND ${TRIQS_PYTHON_EXECUTABLE} test.py
            WORKING_DIRECTORY ${test_dir}
           )
@@ -79,7 +75,7 @@ foreach(file test_maxent.py helper.py)
 endforeach()
 
 add_test(NAME maxent_${test}
-         COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_PREFLAGS} ${TRIQS_PYTHON_EXECUTABLE} test_maxent.py
+         COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${MPIEXEC_MAX_NUMPROCS} ${MPIEXEC_PREFLAGS} ${TRIQS_PYTHON_EXECUTABLE} test_maxent.py
          WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         )
 
@@ -100,10 +96,55 @@ foreach(test ${restart_integration_test})
   endforeach()
 
   add_test(NAME restart_${test}
-           COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_PREFLAGS} ${TRIQS_PYTHON_EXECUTABLE} test_restart.py
+           COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${MPIEXEC_MAX_NUMPROCS} ${MPIEXEC_PREFLAGS} ${TRIQS_PYTHON_EXECUTABLE} test_restart.py
            WORKING_DIRECTORY ${test_dir}
           )
 
   set_property(TEST restart_${test} APPEND PROPERTY ENVIRONMENT PYTHONPATH=${PROJECT_BINARY_DIR}/python:$ENV{PYTHONPATH})
 endforeach()
 set_property(TEST maxent_${test} APPEND PROPERTY DEPENDS "svo_hubbardI_basic")
+
+# ------------------------------#
+
+# GW embedding tests
+option(Test_GW_embedding "Run GW embedding tests" OFF)
+if(Test_GW_embedding)
+
+set(gw_emb_basic_tests
+    test_gw_embedding
+    )
+
+foreach(test ${gw_emb_basic_tests})
+  get_filename_component(test_name ${test} NAME_WE)
+  get_filename_component(test_dir ${test} DIRECTORY)
+  add_test(NAME ${test_name} COMMAND ${TRIQS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/${test_dir}/${test_name}.py WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/${test_dir})
+  set_property(TEST ${test_name} APPEND PROPERTY ENVIRONMENT PYTHONPATH=${PROJECT_BINARY_DIR}/python:$ENV{PYTHONPATH})
+endforeach()
+
+set (gw_emb_integration_tests
+     svo_cthyb_crpa
+     svo_ctseg_dyn
+     svo_gw_emb_stat
+     # svo_gw_emb_dyn
+     )
+
+foreach(test ${gw_emb_integration_tests})
+  set (test_dir ${CMAKE_CURRENT_BINARY_DIR}/${test})
+
+  foreach(file dmft_config.toml inp.h5 ref.h5 test.py)
+    FILE(COPY ${test}/${file} DESTINATION ${test_dir})
+  endforeach()
+
+  add_test(NAME ${test}
+           # COMMAND bash ${test}.sh
+           COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${MPIEXEC_MAX_NUMPROCS} ${MPIEXEC_PREFLAGS} ${TRIQS_PYTHON_EXECUTABLE} test.py
+           # COMMAND ${TRIQS_PYTHON_EXECUTABLE} test.py
+           WORKING_DIRECTORY ${test_dir}
+          )
+
+  set_property(TEST ${test} APPEND PROPERTY ENVIRONMENT PYTHONPATH=${PROJECT_BINARY_DIR}/python:$ENV{PYTHONPATH})
+endforeach()
+
+endif()
+
+

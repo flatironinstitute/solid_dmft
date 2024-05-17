@@ -265,7 +265,7 @@ def _chi_setup(sum_k, solver_params, map_imp_solver):
 
 
 def dmft_cycle(general_params, solver_params, advanced_params, dft_params,
-               n_iter, dft_irred_kpt_indices=None, dft_energy=None):
+               gw_params, n_iter, dft_irred_kpt_indices=None, dft_energy=None):
     """
     main dmft cycle that works for one shot and CSC equally
 
@@ -277,8 +277,10 @@ def dmft_cycle(general_params, solver_params, advanced_params, dft_params,
         solver parameters as a dict
     advanced_params : dict
         advanced parameters as a dict
-    observables : dict
-        current observable array for calculation
+    dft_params : dict
+        dft parameters as a dict
+    gw_params : dict
+        gw parameters as a dict
     n_iter : int
         number of iterations to be executed
     dft_irred_kpt_indices: iterable of int
@@ -482,7 +484,7 @@ def dmft_cycle(general_params, solver_params, advanced_params, dft_params,
             general_params = afm_mapping.determine(general_params, archive, sum_k.n_inequiv_shells)
 
     # Constructs interaction Hamiltonian and writes it to the h5 archive
-    h_int = interaction_hamiltonian.construct(sum_k, general_params, solver_type_per_imp)
+    h_int, gw_params = interaction_hamiltonian.construct(sum_k, general_params, solver_type_per_imp, gw_params)
     if mpi.is_master_node():
         archive['DMFT_input']['h_int'] = h_int
 
@@ -505,7 +507,7 @@ def dmft_cycle(general_params, solver_params, advanced_params, dft_params,
     for icrsh in range(sum_k.n_inequiv_shells):
         # Construct the Solver instances
         solvers[icrsh] = SolverStructure(general_params, solver_params[map_imp_solver[icrsh]],
-                                         advanced_params, sum_k, icrsh, h_int[icrsh],
+                                         gw_params, advanced_params, sum_k, icrsh, h_int[icrsh],
                                          iteration_offset, deg_orbs_ftps)
 
     # store solver hash to archive
@@ -521,10 +523,9 @@ def dmft_cycle(general_params, solver_params, advanced_params, dft_params,
 
     # Extracts local GF per *inequivalent* shell
     local_gf_dft = sum_k.extract_G_loc(broadening=broadening, with_Sigma=False, mu=dft_mu)
-    density_mat_dft = [gf.density() for gf in local_gf_dft]
 
     # Determines initial Sigma and DC
-    sum_k, solvers = initial_sigma.determine_dc_and_initial_sigma(general_params, advanced_params, sum_k,
+    sum_k, solvers = initial_sigma.determine_dc_and_initial_sigma(general_params, gw_params, advanced_params, sum_k,
                                                                   archive, iteration_offset, local_gf_dft, solvers,
                                                                   solver_type_per_imp)
 
@@ -668,8 +669,9 @@ def _dmft_step(sum_k, solvers, it, general_params,
             solvers[icrsh].G0_freq << make_hermitian(solvers[icrsh].G0_freq)
         sum_k.symm_deg_gf(solvers[icrsh].G0_freq, ish=icrsh)
 
-        if solver_type_per_imp[icrsh] == 'cthyb' and solver_params[icrsh]['delta_interface']:
-            mpi.report('\n Using the delta interface for cthyb passing Delta(tau) and Hloc0 directly.')
+        if ((solver_type_per_imp[icrsh] == 'cthyb' and solver_params[icrsh]['delta_interface'])
+                or solver_type_per_imp[icrsh] == 'ctseg'):
+            mpi.report('\n Using the delta interface for passing Delta(tau) and Hloc0 directly to the solver.')
              # prepare solver input
             sumk_eal = sum_k.eff_atomic_levels()[icrsh]
             solver_eal = sum_k.block_structure.convert_matrix(sumk_eal, space_from='sumk', ish_from=sum_k.inequiv_to_corr[icrsh])
@@ -684,8 +686,14 @@ def _dmft_step(sum_k, solvers, it, general_params,
                     solvers[icrsh].Delta_time[name] << make_gf_from_fourier(solvers[icrsh].Delta_freq[name],
                                                                             solvers[icrsh].Delta_time.mesh, tail).real
                 else:
-                    solvers[icrsh].Delta_tau[name] << make_gf_from_fourier(solvers[icrsh].Delta_freq[name],
+                    solvers[icrsh].Delta_time[name] << make_gf_from_fourier(solvers[icrsh].Delta_freq[name],
                                                                            solvers[icrsh].Delta_time.mesh, tail)
+
+                if solver_params[icrsh]['diag_delta']:
+                    for o1 in range(g0.target_shape[0]):
+                        for o2 in range(g0.target_shape[0]):
+                            if o1 != o2:
+                                solvers[icrsh].Delta_time[name].data[:, o1, o2] = 0.0 + 0.0j
 
                 # Make non-interacting operator for Hloc0
                 Hloc_0 = Operator()
@@ -693,7 +701,7 @@ def _dmft_step(sum_k, solvers, it, general_params,
                     for o1 in range(spin_block.shape[0]):
                         for o2 in range(spin_block.shape[1]):
                             # check if off-diag element is larger than threshold
-                            if o1 != o2 and abs(spin_block[o1,o2]) < solver_params['off_diag_threshold']:
+                            if o1 != o2 and abs(spin_block[o1,o2]) < solver_params[icrsh]['off_diag_threshold']:
                                 continue
                             else:
                                 # TODO: adapt for SOC calculations, which should keep the imag part

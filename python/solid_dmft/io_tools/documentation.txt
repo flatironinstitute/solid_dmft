@@ -41,6 +41,15 @@ dc_type : int or list of int, default = None
         * 1: Held formula, needs to be used with slater-kanamori h_int_type=2
         * 2: AMF
         * 3: FLL for eg orbitals only with U,J for Kanamori
+
+        for cRPA interactions this can be also a string to determine the type of DC from the full interaction
+        * crpa_static
+        * crpa_static_qp
+        * crpa_dynamic
+dlr_eps : float, default = None
+        precision for DLR basis set if needed, see also triqs.gf.meshes.MeshDLR
+dlr_wmax : float, default = None
+        spectral width (one-side) for DLR basis set if needed, see also triqs.gf.meshes.MeshDLR
 enforce_off_diag : bool or list of bool, default = True
         only if False, the block structure can be reduced to ignore off-diagonal elements
         if they are below the general.block_threshold of the block structure finder
@@ -61,6 +70,8 @@ g0_mix_type : string, default = 'linear'
         broyden: broyden mixing
 gimp_conv_crit : float, default = -1.0
         stop the calculation if  sum_w 1/(w^0.6) ||Gimp-Gloc|| is smaller than threshold
+gw_embedding : bool, default = False
+        use GW embedding workflow module (gw_flow.py) instead of dmft_cycle for aimbes GW embedding, see section gw
 h_field : float, default = 0.0
         magnetic field
 h_field_it : int, default = 0
@@ -83,9 +94,9 @@ h_int_type : string, mandatory
         * simple_intra: density-density like but only intra orbital with given U value (no rotations applied)
         * crpa: use the cRPA matrix as interaction Hamiltonian
         * crpa_density_density: use the density-density terms of the cRPA matrix
-        * dynamic: use dynamic U from h5 archive
+        * dyn_full: use dynamic U from h5 archive
+        * dyn_density_density: use dynamic U from h5 archive but only the density-density terms
 
-        Needs to be stored as Matsubara Gf under dynamic_U/U_iw in the input h5
 h5_save_freq : int, default = 5
         how often is the output saved to the h5 archive
 J :  float or list of float, mandatory
@@ -179,6 +190,9 @@ store_solver : bool, default = False
 U : float or list of float, mandatory
         U interaction value. If it is a float, the same U is assumed for all impurities,
         otherwise as a list a different U can be specified per impurity.
+U_crpa_threshold : float, default = 0.0
+        threshold for the cRPA interaction matrix. If the absolute value of the
+        elements is below this threshold, they are set to zero.
 U_prime : float or list of floats, default = None
         U prime interaction value.
         Only used for impurities where general.h_int_type is kanamori.
@@ -204,8 +218,13 @@ idx_impurities : list of int, default = None
 
 cthyb
 =====
+crm_dyson_solver : bool, default = False
+        use CRM Dyson solver to extract Sigma_imp from G(tau) (conflict with legendre_fit and tail_fit)
+        set dlr_wmax and dlr_eps parameters in general section to use
 delta_interface : bool, default = False
         use delta interface in cthyb instead of input G0
+diag_delta : bool, default = False
+        approximate the hybridization function as diagonal when using the delta interface
 fit_max_moment : int, default = None
         max moment to be fitted. Only used if solver.perform_tail_fit = True
 fit_max_n : int, default = None
@@ -295,6 +314,11 @@ random_seed : str, default = None
 
 ctseg
 =====
+crm_dyson_solver : bool, default = False
+        use CRM Dyson solver to extract Sigma_imp from G(tau) (conflict with legendre_fit and tail_fit)
+        set dlr_wmax and dlr_eps parameters in general section to use
+diag_delta : bool, default = False
+        approximate the hybridization function as diagonal when using the delta interface
 improved_estimator : bool, default = False
         measure improved estimators
         Sigma_iw will automatically be calculated via
@@ -305,23 +329,27 @@ length_cycle : int, mandatory
         length of each cycle; number of sweeps before measurement is taken
 max_time : int, default = -1
         maximum amount the solver is allowed to spend in each iteration
-measure_G_iw : bool, default = False
-        should the solver measure G(iw)?
-measure_G_l : bool, default = False
-        measure Legendre Greens function
 measure_G_tau : bool, default = True
         should the solver measure G(tau)?
+measure_nnt : boold, default = False
+        measure two particle density-density correlation function (suszeptibility)
 measure_pert_order : bool, default = False
         measure perturbation order histograms: triqs.github.io/cthyb/latest/guide/perturbation_order_notebook.html.
         The result is stored in the h5 archive under 'DMFT_results' at every iteration
         in the subgroups 'pert_order_imp_X' and 'pert_order_total_imp_X'
+measure_statehist : bool, default = False
+        measure state histogram, i.e. diagonal components of many body density matrix
 n_cycles_tot : int, mandatory
         total number of sweeps
 n_l : int, default = None
         number of Legendre coefficients.
         Needed if measure_G_l=True or legendre_fit=True
+n_tau_k : int, default = 10001
+        number imaginary time points for dynamic interactions
 n_warmup_cycles : int, mandatory
         number of warmup cycles before real measurement sets in
+off_diag_threshold : float, default = 0.0
+        threshold for off-diag elements in Hloc0
 random_seed : str, default = None
         if None, uses default seed by triqs.
         If specified the int will be used for random seeds. Careful, this will give the same random
@@ -447,6 +475,19 @@ w90_exec : string, default ='wannier90.x'
         the command to start a single-core wannier run
 w90_tolerance : float, default = 1e-6
         threshold for mapping of shells and checks of the Hamiltonian
+
+[  gw  ]
+--------
+code : str, default = None
+        GW embedding code: aimbes or Vasp to load screened interaction
+h5_file : str, default = None
+        path to h5 file in which the aimbes results are stored (checkpoint file)
+use_rot : bool, default = False
+        use rotations of sum_k object to rotate 2 particle objects
+it_1 : int, default = 0
+        iteration to load 1 particle objects from aimbes
+it_2 : int, default = 0
+        iteration to load 2 particle objects from aimbes
 
 [  advanced  ]
 --------------

@@ -106,6 +106,8 @@ def calc_Sigma_DC_gw(Wloc_dlr, Gloc_dlr, Vloc, verbose=False):
     # static hartree Part
     Sig_DC_hartree = np.zeros((n_orb, n_orb))
     Sig_DC_hartree = 2 * np.einsum('ijkl, lj -> ik', Vloc, Gloc_dlr.density())
+    # symmetrize
+    Sig_DC_hartree = 0.5 * (Sig_DC_hartree + Sig_DC_hartree.conj().T)
 
     if verbose:
         print('static Hartree part of DC')
@@ -117,6 +119,8 @@ def calc_Sigma_DC_gw(Wloc_dlr, Gloc_dlr, Vloc, verbose=False):
     # static exchange part
     Sig_DC_exchange = np.zeros((n_orb, n_orb))
     Sig_DC_exchange = -1 * np.einsum('ijkl, jk -> li', Vloc, Gloc_dlr.density())
+    # symmetrize
+    Sig_DC_exchange = 0.5 * (Sig_DC_exchange + Sig_DC_exchange.conj().T)
 
     if verbose:
         print('static exchange part of DC')
@@ -240,7 +244,7 @@ def calc_W_from_Gloc(Gloc_dlr: Gf | BlockGf, U: np.ndarray | dict) -> Gf | Block
     return W_dlr
 
 
-def convert_gw_output(job_h5: str, gw_h5: str, it_1e: int = 0, it_2e: int = 0) -> tuple[dict, IAFT]:
+def convert_gw_output(job_h5, gw_h5, it_1e=0, it_2e=0, ha_ev_conv = False):
     """
     read bdft output and convert to triqs Gf DLR objects
 
@@ -254,6 +258,8 @@ def convert_gw_output(job_h5: str, gw_h5: str, it_1e: int = 0, it_2e: int = 0) -
         iteration to read from gw_h5 calculation for 1e downfolding, defaults to last iteration
     it_2e: int, optional
         iteration to read from gw_h5 calculation for 2e downfolding, defaults to last iteration
+    ha_ev_conv: bool, optional
+        convert energies from Hartree to eV, defaults to False
 
     Returns
     -------
@@ -268,6 +274,11 @@ def convert_gw_output(job_h5: str, gw_h5: str, it_1e: int = 0, it_2e: int = 0) -
     mpi.report('reading output from bdft code')
 
     gw_data = {}
+
+    if ha_ev_conv:
+        conv_fac = HARTREE_EV
+    else:
+        conv_fac = 1.0
 
     with HDFArchive(gw_h5, 'r') as ar:
         if not it_1e or not it_2e:
@@ -340,15 +351,15 @@ def convert_gw_output(job_h5: str, gw_h5: str, it_1e: int = 0, it_2e: int = 0) -
     ir_kernel = IAFT(beta=gw_data['beta'], lmbda=gw_data['lam'], prec=gw_data['gw_ir_prec'])
 
     gw_data['mesh_dlr_iw_b'] = MeshDLRImFreq(
-        beta=gw_data['beta'],
+        beta=gw_data['beta']/conv_fac,
         statistic='Boson',
-        w_max=gw_data['gw_wmax'],
+        w_max=gw_data['gw_wmax']*conv_fac,
         eps=gw_data['gw_dlr_prec'],
     )
     gw_data['mesh_dlr_iw_f'] = MeshDLRImFreq(
-        beta=gw_data['beta'],
+        beta=gw_data['beta']/conv_fac,
         statistic='Fermion',
-        w_max=gw_data['gw_wmax'],
+        w_max=gw_data['gw_wmax']*conv_fac,
         eps=gw_data['gw_dlr_prec'],
     )
 
@@ -366,31 +377,31 @@ def convert_gw_output(job_h5: str, gw_h5: str, it_1e: int = 0, it_2e: int = 0) -
     ) = [], [], [], [], [], [], [], [], [], []
     for ish in range(gw_data['n_inequiv_shells']):
         # fit IR Uloc on DLR iw mesh
-        temp = _get_dlr_from_IR(Uloc_ir, ir_kernel, gw_data['mesh_dlr_iw_b'], dim=4)
+        temp = _get_dlr_from_IR(Uloc_ir*conv_fac, ir_kernel, gw_data['mesh_dlr_iw_b'], dim=4)
         Uloc_dlr = BlockGf(name_list=['up', 'down'], block_list=[temp, temp], make_copies=True)
 
         U_dlr_list.append(Uloc_dlr)
-        V_list.append({'up': Vloc.copy(), 'down': Vloc})
-        Hloc_list.append({'up': Hloc0.copy(), 'down': Hloc0})
-        Vhf_list.append({'up': Vhf_sIab.copy(), 'down': Vhf_sIab})
-        Vhf_dc_list.append({'up': Vhf_dc_sIab.copy(), 'down': Vhf_dc_sIab})
+        V_list.append({'up': Vloc.copy()*conv_fac, 'down': Vloc*conv_fac})
+        Hloc_list.append({'up': Hloc0.copy()*conv_fac, 'down': Hloc0*conv_fac})
+        Vhf_list.append({'up': Vhf_sIab.copy()*conv_fac, 'down': Vhf_sIab*conv_fac})
+        Vhf_dc_list.append({'up': Vhf_dc_sIab.copy()*conv_fac, 'down': Vhf_dc_sIab*conv_fac})
         n_orb_list.append(n_orb)
 
-        temp = _get_dlr_from_IR(g_weiss_wsIab[:, 0, ish, :, :], ir_kernel, gw_data['mesh_dlr_iw_f'], dim=2)
+        temp = _get_dlr_from_IR(g_weiss_wsIab[:, 0, ish, :, :]/conv_fac, ir_kernel, gw_data['mesh_dlr_iw_f'], dim=2)
         G0_dlr = BlockGf(name_list=['up', 'down'], block_list=[temp, temp], make_copies=True)
         G0_dlr_list.append(G0_dlr)
 
-        temp = _get_dlr_from_IR(Gloc[:, 0, ish, :, :], ir_kernel, gw_data['mesh_dlr_iw_f'], dim=2)
+        temp = _get_dlr_from_IR(Gloc[:, 0, ish, :, :]/conv_fac, ir_kernel, gw_data['mesh_dlr_iw_f'], dim=2)
         Gloc_dlr = BlockGf(name_list=['up', 'down'], block_list=[temp, temp], make_copies=True)
         Gloc_dlr_list.append(Gloc_dlr)
 
         # since Sigma can have a static shift we return DLR Imfreq mesh
         if not qp_emb:
-            temp = _get_dlr_from_IR(Sigma_wsIab[:, 0, ish, :, :], ir_kernel, gw_data['mesh_dlr_iw_f'], dim=2)
+            temp = _get_dlr_from_IR(Sigma_wsIab[:, 0, ish, :, :]*conv_fac, ir_kernel, gw_data['mesh_dlr_iw_f'], dim=2)
             Sigma_dlr = BlockGf(name_list=['up', 'down'], block_list=[temp, temp], make_copies=True)
             Sigma_dlr_list.append(Sigma_dlr)
 
-        temp = _get_dlr_from_IR(Sigma_dc_wsIab[:, 0, ish, :, :], ir_kernel, gw_data['mesh_dlr_iw_f'], dim=2)
+        temp = _get_dlr_from_IR(Sigma_dc_wsIab[:, 0, ish, :, :]*conv_fac, ir_kernel, gw_data['mesh_dlr_iw_f'], dim=2)
         Sigma_DC_dlr = BlockGf(name_list=['up', 'down'], block_list=[temp, temp], make_copies=True)
         Sigma_DC_dlr_list.append(Sigma_DC_dlr)
 
@@ -421,6 +432,7 @@ def convert_gw_output(job_h5: str, gw_h5: str, it_1e: int = 0, it_2e: int = 0) -
         for key, value in gw_data.items():
             ar[f'DMFT_input/iter{it}'][key] = value
 
+    mpi.report(f'finished writing results in {job_h5}/DMFT_input')
     return gw_data, ir_kernel
 
 

@@ -278,7 +278,9 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
 
     # create h_int
     general_params = _extract_quantity_per_inequiv('h_int_type', sumk.n_inequiv_shells, general_params)
-    h_int = interaction_hamiltonian.construct(sumk, general_params, advanced_params, gw_params)
+    general_params = _extract_quantity_per_inequiv('dc_type', sumk.n_inequiv_shells, general_params)
+
+    h_int, gw_params = interaction_hamiltonian.construct(sumk, general_params, advanced_params, gw_params)
 
     if len(solver_params) == 1 and solver_params[0]['idx_impurities'] is None:
         map_imp_solver = [0] * sumk.n_inequiv_shells
@@ -315,7 +317,7 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
     for ish in range(sumk.n_inequiv_shells):
         # Construct the Solver instances
         solvers[ish] = SolverStructure(general_params, solver_params[map_imp_solver[ish]],
-                                       advanced_params, sumk, ish, h_int[ish])
+                                       gw_params, advanced_params, sumk, ish, h_int[ish])
 
     # init local density matrices for observables
     density_tot = 0.0
@@ -346,8 +348,9 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
         if not general_params['enforce_off_diag']:
             mpi.report('\n*** WARNING: off-diagonal elements are neglected in the impurity solver ***')
 
-        if solver_type_per_imp[ish] == 'cthyb' and solver_params[ish]['delta_interface']:
-            mpi.report('\n Using the delta interface for cthyb passing Delta(tau) and Hloc0 directly.\n')
+        if ((solver_type_per_imp[ish] == 'cthyb' and solver_params[ish]['delta_interface'])
+                or solver_type_per_imp[ish] == 'ctseg'):
+            mpi.report('\n Using the delta interface for passing Delta(tau) and Hloc0 directly to the solver.\n')
             Gloc_dlr = sumk.block_structure.convert_gf(gw_params['Gloc_dlr'][ish], ish_from=ish, space_from='sumk', space_to='solver')
             # prepare solver input
             imp_eal = sumk.block_structure.convert_matrix(gw_params['Hloc0'][ish], ish_from=ish, space_from='sumk', space_to='solver')
@@ -387,7 +390,7 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
                 for o1 in range(spin_block.shape[0]):
                     for o2 in range(spin_block.shape[1]):
                         # check if off-diag element is larger than threshold
-                        if o1 != o2 and abs(spin_block[o1, o2]) < solver_params['off_diag_threshold']:
+                        if o1 != o2 and abs(spin_block[o1, o2]) < solver_params[ish]['off_diag_threshold']:
                             continue
                         else:
                             # TODO: adapt for SOC calculations, which should keep the imag part
@@ -416,8 +419,8 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
 
         # post-processing for GW
         if mpi.is_master_node():
-            if solver_params[ish]['type'] == 'cthyb' and solver_params[ish]['crm_dyson_solver']:
-                Sigma_dlr[ish] = solvers[ish].Sigma_dlr
+            if solver_params[ish]['type'] in ('cthyb', 'ctseg') and solver_params[ish]['crm_dyson_solver']:
+                Sigma_dlr[ish] = make_gf_dlr(solvers[ish].Sigma_dlr)
             else:
                 Sigma_dlr_iw[ish] = sumk.block_structure.create_gf(ish=ish,
                                                                    gf_function=Gf,

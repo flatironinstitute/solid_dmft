@@ -55,6 +55,7 @@ sigma_conv_crit = -1.0
 sigma_mix = 1.0
 store_solver = false
 U = "<none>"
+U_crpa_threshold = 0.0
 U_prime = "<none>"
 w_range = [-10, 10]
 
@@ -72,7 +73,7 @@ fit_max_w = "<none>"
 fit_min_n = "<none>"
 fit_min_w = "<none>"
 idx_impurities = "<none>"
-imag_threshold = 1.0e-14
+imag_threshold = 1.0e-8
 legendre_fit = false
 length_cycle = "<no default>"
 loc_n_max = "<none>"
@@ -105,19 +106,22 @@ random_seed = "<none>"
 
 [[solver]]
 type = "ctseg"
+crm_dyson_solver = false
+diag_delta = false
 idx_impurities = "<none>"
 improved_estimator = false
 legendre_fit = false
 length_cycle = "<no default>"
 max_time = -1
-measure_G_iw = false
-measure_G_l = false
 measure_G_tau = true
-measure_pert_order = false
+measure_nnt = false
+measure_pert_order = true
+measure_statehist = true
 n_cycles_tot = "<no default>"
 n_l = "<none>"
-n_w_b_nn = 1025
+n_tau_k = 10001
 n_warmup_cycles = "<no default>"
+off_diag_threshold = 0.0
 random_seed = "<none>"
 
 [[solver]]
