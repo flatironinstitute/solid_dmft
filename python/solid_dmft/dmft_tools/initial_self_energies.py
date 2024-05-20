@@ -35,10 +35,7 @@ import numpy as np
 from h5 import HDFArchive
 import triqs.utility.mpi as mpi
 from triqs.gf import BlockGf, Gf, make_gf_imfreq, MeshDLRImFreq, make_gf_dlr, MeshReFreq
-from triqs.operators import util
 import itertools
-
-from solid_dmft.gw_embedding.bdft_converter import calc_Sigma_DC_gw, calc_W_from_Gloc, convert_gw_output
 
 def calculate_double_counting(sum_k, density_matrix, general_params, gw_params, advanced_params, solver_type_per_imp, G_loc_all=None):
     """
@@ -112,6 +109,7 @@ def calculate_double_counting(sum_k, density_matrix, general_params, gw_params, 
                           orb=icrsh, use_dc_formula=0)
         # DC calculated for dynamic interaction from AIMBES
         elif general_params['dc_type'][icrsh] in ('crpa_static', 'crpa_static_qp', 'crpa_dynamic'):
+            from solid_dmft.gw_embedding.bdft_converter import calc_Sigma_DC_gw, calc_W_from_Gloc, convert_gw_output
             mpi.report('\n*** Using dynamic interactions to calculate DC ***')
 
             # lad GW input from h5 file

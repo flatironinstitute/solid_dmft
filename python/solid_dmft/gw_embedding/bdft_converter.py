@@ -26,7 +26,6 @@
 converter from bdft output to edmft input for solid_dmft
 """
 
-from os import stat
 import numpy as np
 from scipy.constants import physical_constants
 
@@ -38,7 +37,6 @@ from triqs.gf import (
     BlockGf,
     make_gf_dlr_imtime,
     make_gf_dlr,
-    make_gf_imfreq,
     make_gf_dlr_imfreq,
 )
 from triqs.gf.meshes import MeshDLRImFreq, MeshDLRImTime

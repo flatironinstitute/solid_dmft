@@ -38,7 +38,6 @@ import triqs.utility.mpi as mpi
 from triqs.gf import make_gf_imfreq
 from triqs.operators import util, n, c, c_dag, Operator
 from solid_dmft.dmft_tools import solver
-from solid_dmft.gw_embedding.bdft_converter import convert_gw_output
 
 
 try:
@@ -91,6 +90,7 @@ def _load_crpa_interaction_matrix(sum_k, general_params, gw_params, filename='UI
             print('Warning: different number of orbitals in cRPA matrix than in calculation.')
 
     elif gw_params['code'] == 'aimbes':
+        from solid_dmft.gw_embedding.bdft_converter import convert_gw_output
         u_matrix_four_indices_per_shell = []
         # lad GW input from h5 file
         if mpi.is_master_node():
