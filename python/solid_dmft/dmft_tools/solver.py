@@ -1115,9 +1115,6 @@ class SolverStructure:
         if self.solver_params['measure_chi'] is not None:
             self.O_time = self.triqs_solver.O_tau
 
-        # if self.solver_params['measure_G_iw']:
-        #     self.G_iw_direct = self.triqs_solver.G_iw_direct
-
         return
 
     def _ctint_postprocessing(self):
