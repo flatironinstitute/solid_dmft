@@ -121,7 +121,7 @@ class test_convergence(unittest.TestCase):
         assert np.allclose(tb_data['e_mat'], emat_ref)
         assert np.allclose(alatt_k_w, Akw_ref)
 
-    def test_get_dmft_bands_reg_mesh(self):
+    def test_get_dmft_bands_reg_mesh_read_TB_obj(self):
         tb_bands = {'kmesh': 'regular', 'n_k': 7}
 
         tb_data, alatt_k_w, freq_dict = pcb.get_dmft_bands(with_sigma='calc', add_mu_tb=True,
@@ -134,6 +134,18 @@ class test_convergence(unittest.TestCase):
 
         assert np.allclose(tb_data['e_mat'], emat_ref)
         assert np.allclose(alatt_k_w, Akw_ref)
+
+        # read now from TB_obj
+        w90_dict = {'TB_obj': tb_data['tb'], 'mu_tb': 12.3958, 'n_orb': 3,
+                         'orbital_order_w90': ['dxz', 'dyz', 'dxy']}
+
+        tb_data_obj, alatt_k_w_obj, freq_dict_obj = pcb.get_dmft_bands(with_sigma='calc', add_mu_tb=True,
+                                                           orbital_order_to=self.orbital_order_to,
+                                                           **w90_dict, **tb_bands, **self.sigma_dict)
+
+        assert np.allclose(tb_data_obj['e_mat'], emat_ref)
+        assert np.allclose(alatt_k_w_obj, Akw_ref)
+
 
 if __name__ == '__main__':
     unittest.main()
