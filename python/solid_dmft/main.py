@@ -47,7 +47,6 @@ import triqs.utility.mpi as mpi
 # own modules
 from solid_dmft.dmft_cycle import dmft_cycle
 from solid_dmft.csc_flow import csc_flow_control
-from solid_dmft.gw_embedding.gw_flow import embedding_driver
 from solid_dmft.io_tools import postproc_toml_dict, verify_input_params
 
 def run_dmft(params, config_file_name=None):
@@ -95,6 +94,7 @@ def run_dmft(params, config_file_name=None):
         general_params['jobname'] = '.'
         csc_flow_control(general_params, solver_params, dft_params, advanced_params)
     elif general_params['gw_embedding']:
+        from solid_dmft.gw_embedding.gw_flow import embedding_driver
         if mpi.is_master_node():
             # Creates output directory if it does not exist
             if not os.path.exists(general_params['jobname']):
