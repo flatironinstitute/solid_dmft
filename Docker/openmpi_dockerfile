@@ -105,6 +105,9 @@ RUN mkdir -p /src && cd /src \
 #     && cd .. \
 #     && rm -rf openmpi-4.1.5.tar.gz openmpi-4.1.5
 
+# install sparse-ir into triqs pythonpath
+RUN pip install --target /triqs/lib/python3.10/site-packages sparse-ir[xprec]
+
 ENV PYTHON_VERSION=3.10 \
     CC=clang-${LLVM} CXX=clang++-${LLVM} CXXFLAGS="-stdlib=libc++"
 RUN update-alternatives --install /usr/bin/clang clang /usr/bin/clang-${LLVM} 60 --slave /usr/bin/clang++ clang++ /usr/bin/clang++-${LLVM} --slave /usr/bin/clang-cpp clang-cpp /usr/bin/clang-cpp-${LLVM}
