@@ -1,4 +1,4 @@
-name: build_stable
+name: build_3.1.x
 
 on:
   push:
@@ -15,12 +15,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
-        with: 
+        with:
           path: 'solid_dmft.src'
 
       - name: Build solid_dmft
         run: |
-          mkdir solid_dmft.build && cd solid_dmft.build && cmake ../solid_dmft.src -DMPIEXEC_PREFLAGS='--allow-run-as-root' 
+          mkdir solid_dmft.build && cd solid_dmft.build && cmake ../solid_dmft.src -DMPIEXEC_PREFLAGS='--allow-run-as-root'
           make
 
       - name: Test solid_dmft

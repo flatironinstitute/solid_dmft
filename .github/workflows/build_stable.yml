@@ -1,4 +1,4 @@
-name: build_stable
+name: build_3.3.x
 
 on:
   push:
