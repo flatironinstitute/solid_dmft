@@ -613,12 +613,12 @@ class SolverStructure:
             self.triqs_solver.Delta_tau << self.Delta_time
             # extract hartree shift per orbital for solver
             hloc_0_bm = block_matrix_from_op(self.Hloc_0, self.sum_k.gf_struct_solver_list[self.icrsh])
-            hartree_shift = []
+            chemical_potential = []
             for block in hloc_0_bm:
                 for iorb in range(block.shape[0]):
                     # minus sign here as the solver treats the term as chemical potential and not Hloc0
-                    hartree_shift.append(-block[iorb,iorb].real)
-            mpi.report('hartree_shift:', hartree_shift)
+                    chemical_potential.append(-block[iorb,iorb].real)
+            mpi.report('impurity levels:', chemical_potential)
 
             if self.general_params['h_int_type'][self.icrsh] == 'dyn_density_density':
                 mpi.report('add dynamic interaction from bdft')
@@ -674,7 +674,7 @@ class SolverStructure:
             mpi.barrier()
             # Solve the impurity problem for icrsh shell
             # *************************************
-            self.triqs_solver.solve(h_int=self.h_int, hartree_shift=hartree_shift, **self.triqs_solver_params)
+            self.triqs_solver.solve(h_int=self.h_int, chemical_potential=chemical_potential, **self.triqs_solver_params)
             # *************************************
 
             # call postprocessing
