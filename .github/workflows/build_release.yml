@@ -1,8 +1,8 @@
-name: build_3.3.x
+name: build release
 
 on:
   push:
-    branches: [ 3.3.x ]
+    branches: [ '[0-9]+.[0-9]+.x' ]
 
 env:
   CMAKE_BUILD_PARALLEL_LEVEL: 2
@@ -23,7 +23,7 @@ jobs:
 
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/triqs/solid_dmft_github_ci:3.3.x
+      image: ghcr.io/triqs/solid_dmft_github_ci:${{github.ref_name}}
 
     steps:
       - uses: actions/checkout@v4

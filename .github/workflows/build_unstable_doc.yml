@@ -1,4 +1,4 @@
-name: build
+name: build unstable & doc
 
 on:
   push:
@@ -23,7 +23,7 @@ jobs:
 
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/triqs/solid_dmft_github_ci:unstable
+      image: ghcr.io/triqs/solid_dmft_github_ci:${{github.ref_name}}
 
     steps:
       - uses: actions/checkout@v4
