@@ -228,7 +228,6 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
 
     assert gw_params['code'] == 'aimbes', 'Only AIMBES is currently supported as gw code'
 
-    iteration = 1
     # prepare output h5 archive
     if mpi.is_master_node():
         with HDFArchive(general_params['jobname'] + '/' + general_params['seedname'] + '.h5', 'a') as ar:
@@ -351,11 +350,12 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
         if ((solver_type_per_imp[ish] == 'cthyb' and solver_params[ish]['delta_interface'])
                 or solver_type_per_imp[ish] == 'ctseg'):
             mpi.report('\n Using the delta interface for passing Delta(tau) and Hloc0 directly to the solver.\n')
-            Gloc_dlr = sumk.block_structure.convert_gf(gw_params['Gloc_dlr'][ish], ish_from=ish, space_from='sumk', space_to='solver')
+
+            G0_dlr = sumk.block_structure.convert_gf(gw_params['G0_dlr'][ish], ish_from=ish, space_from='sumk', space_to='solver')
             # prepare solver input
             imp_eal = sumk.block_structure.convert_matrix(gw_params['Hloc0'][ish], ish_from=ish, space_from='sumk', space_to='solver')
             # fill Delta_time from Delta_freq sumk to solver
-            for name, g0 in Gloc_dlr:
+            for name, g0 in G0_dlr:
                 G0_dlr_iw = make_gf_dlr_imfreq(g0)
                 # make non-interacting impurity Hamiltonian hermitian
                 imp_eal[name] = (imp_eal[name] + imp_eal[name].T.conj())/2

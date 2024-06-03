@@ -1283,7 +1283,7 @@ class SolverStructure:
 
     def _ctseg_postprocessing(self):
         r'''
-        Organize G_freq, G_time, Sigma_freq and G_l from cthyb solver
+        Organize G_freq, G_time, Sigma_freq and G_l from ctseg solver
         '''
 
         def set_Gs_from_G_l():

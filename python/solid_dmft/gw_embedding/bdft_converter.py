@@ -314,7 +314,7 @@ def convert_gw_output(job_h5, gw_h5, it_1e=0, it_2e=0, ha_ev_conv = False):
         IR kernel with AIMBES paramaters
     """
 
-    mpi.report('reading output from bdft code')
+    mpi.report('reading output from aimbes code')
 
     gw_data = {}
 
@@ -354,6 +354,7 @@ def convert_gw_output(job_h5, gw_h5, it_1e=0, it_2e=0, ha_ev_conv = False):
 
         # 1 particle properties
         g_weiss_wsIab = ar[f'downfold_1e/iter{it_1e}']['g_weiss_wsIab']
+        delta_wsIab = ar[f'downfold_1e/iter{it_1e}']['delta_wsIab']
         Sigma_dc_wsIab = ar[f'downfold_1e/iter{it_1e}']['Sigma_dc_wsIab']
         Gloc = ar[f'downfold_1e/iter{it_1e}']['Gloc_wsIab']
         gw_data['n_inequiv_shells'] = Gloc.shape[2]
@@ -409,6 +410,7 @@ def convert_gw_output(job_h5, gw_h5, it_1e=0, it_2e=0, ha_ev_conv = False):
     (
         U_dlr_list,
         G0_dlr_list,
+        delta_dlr_list,
         Gloc_dlr_list,
         Sigma_dlr_list,
         Sigma_DC_dlr_list,
@@ -417,7 +419,7 @@ def convert_gw_output(job_h5, gw_h5, it_1e=0, it_2e=0, ha_ev_conv = False):
         Vhf_list,
         Vhf_dc_list,
         n_orb_list,
-    ) = [], [], [], [], [], [], [], [], [], []
+    ) = [], [], [], [], [], [], [], [], [], [], []
     for ish in range(gw_data['n_inequiv_shells']):
         # fit IR Uloc on DLR iw mesh
         temp = _get_dlr_from_IR(Uloc_ir*conv_fac, ir_kernel, gw_data['mesh_dlr_iw_b'], dim=4)
@@ -434,6 +436,10 @@ def convert_gw_output(job_h5, gw_h5, it_1e=0, it_2e=0, ha_ev_conv = False):
         G0_dlr = BlockGf(name_list=['up', 'down'], block_list=[temp, temp], make_copies=True)
         G0_dlr_list.append(G0_dlr)
 
+        temp = _get_dlr_from_IR(delta_wsIab[:, 0, ish, :, :]/conv_fac, ir_kernel, gw_data['mesh_dlr_iw_f'], dim=2)
+        delta_dlr = BlockGf(name_list=['up', 'down'], block_list=[temp, temp], make_copies=True)
+        delta_dlr_list.append(delta_dlr)
+
         temp = _get_dlr_from_IR(Gloc[:, 0, ish, :, :]/conv_fac, ir_kernel, gw_data['mesh_dlr_iw_f'], dim=2)
         Gloc_dlr = BlockGf(name_list=['up', 'down'], block_list=[temp, temp], make_copies=True)
         Gloc_dlr_list.append(Gloc_dlr)
@@ -449,6 +455,7 @@ def convert_gw_output(job_h5, gw_h5, it_1e=0, it_2e=0, ha_ev_conv = False):
         Sigma_DC_dlr_list.append(Sigma_DC_dlr)
 
     gw_data['G0_dlr'] = G0_dlr_list
+    gw_data['delta_dlr'] = delta_dlr_list
     gw_data['Gloc_dlr'] = Gloc_dlr_list
     gw_data['Sigma_imp_dlr'] = Sigma_dlr_list
     gw_data['Sigma_imp_DC_dlr'] = Sigma_DC_dlr_list
