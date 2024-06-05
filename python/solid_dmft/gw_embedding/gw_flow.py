@@ -347,16 +347,20 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
         if not general_params['enforce_off_diag']:
             mpi.report('\n*** WARNING: off-diagonal elements are neglected in the impurity solver ***')
 
+        # convert G0 to solver basis
+        G0_dlr = sumk.block_structure.convert_gf(gw_params['G0_dlr'][ish], ish_from=ish, space_from='sumk', space_to='solver')
+        # dyson equation to extract G0_freq, using Hermitian symmetry (always needed in solver postprocessing)
+        solvers[ish].G0_freq << make_hermitian(make_gf_imfreq(G0_dlr, n_iw=general_params['n_iw']))
+
         if ((solver_type_per_imp[ish] == 'cthyb' and solver_params[ish]['delta_interface'])
                 or solver_type_per_imp[ish] == 'ctseg'):
             mpi.report('\n Using the delta interface for passing Delta(tau) and Hloc0 directly to the solver.\n')
 
-            G0_dlr = sumk.block_structure.convert_gf(gw_params['G0_dlr'][ish], ish_from=ish, space_from='sumk', space_to='solver')
             # prepare solver input
             imp_eal = sumk.block_structure.convert_matrix(gw_params['Hloc0'][ish], ish_from=ish, space_from='sumk', space_to='solver')
+            delta_dlr = sumk.block_structure.convert_gf(gw_params['delta_dlr'][ish], ish_from=ish, space_from='sumk', space_to='solver')
             # fill Delta_time from Delta_freq sumk to solver
-            for name, g0 in G0_dlr:
-                G0_dlr_iw = make_gf_dlr_imfreq(g0)
+            for name, g0 in delta_dlr:
                 # make non-interacting impurity Hamiltonian hermitian
                 imp_eal[name] = (imp_eal[name] + imp_eal[name].T.conj())/2
                 if mpi.is_master_node():
@@ -365,15 +369,10 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
                     for block in imp_eal[name]:
                         print((' '*11 + fmt).format(*block.real))
 
-                Delta_dlr_iw = Gf(mesh=G0_dlr_iw.mesh, target_shape=g0.target_shape)
-                for iw in G0_dlr_iw.mesh:
-                    Delta_dlr_iw[iw] = iw.value - inverse(G0_dlr_iw[iw]) - imp_eal[name]
-
                 # without SOC delta_tau needs to be real
                 if not sumk.SO == 1:
-                    Delta_dlr = make_gf_dlr(Delta_dlr_iw)
-                    Delta_tau = make_hermitian(make_gf_imtime(Delta_dlr, n_tau=general_params['n_tau']))
                     # create now full delta(tau)
+                    Delta_tau = make_hermitian(make_gf_imtime(delta_dlr[name], n_tau=general_params['n_tau']))
                     solvers[ish].Delta_time[name] << Delta_tau.real
                 else:
                     solvers[ish].Delta_time[name] << Delta_tau
@@ -396,11 +395,6 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
                             # TODO: adapt for SOC calculations, which should keep the imag part
                             Hloc_0 += spin_block[o1, o2].real / 2 * (c_dag(spin, o1) * c(spin, o2) + c_dag(spin, o2) * c(spin, o1))
             solvers[ish].Hloc_0 = Hloc_0
-        else:
-            # convert G0 to solver basis
-            G0_dlr = sumk.block_structure.convert_gf(gw_params['G0_dlr'][ish], ish_from=ish, space_from='sumk', space_to='solver')
-            # dyson equation to extract G0_freq, using Hermitian symmetry
-            solvers[ish].G0_freq << make_hermitian(make_gf_imfreq(G0_dlr, n_iw=general_params['n_iw']))
 
         mpi.report('\nSolving the impurity problem for shell {} ...'.format(ish))
         mpi.barrier()
@@ -419,6 +413,13 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
 
         # post-processing for GW
         if mpi.is_master_node():
+            if not hasattr(solvers[ish], 'Sigma_Hartree'):
+                print('Moments of Sigma not measured using tail fit to extract static Hartree shift for DLR fit.')
+                solvers[ish].Sigma_Hartree = {}
+                for block, gf in solvers[ish].Sigma_freq:
+                    tail, err = gf.fit_hermitian_tail()
+                    solvers[ish].Sigma_Hartree[block] = tail[0]
+
             if solver_params[ish]['type'] in ('cthyb', 'ctseg') and solver_params[ish]['crm_dyson_solver']:
                 Sigma_dlr[ish] = make_gf_dlr(solvers[ish].Sigma_dlr)
             else:
