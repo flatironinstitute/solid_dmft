@@ -105,6 +105,78 @@ def _gf_fit_tail_fraction(Gf, fraction=0.4, replace=None, known_moments=[]):
 
     return Gf_fit
 
+def _fit_tail_window(
+        Sigma_iw,
+        fit_min_n=None, fit_max_n=None,
+        fit_min_w=None, fit_max_w=None,
+        fit_max_moment=None, fit_known_moments=None
+        ):
+    """
+    Fit a high frequency 1/(iw)^n expansion of Sigma_iw
+    and replace the high frequency part with the fitted high frequency expansion.
+
+    Either give frequency window to fit on in terms of matsubara frequencies index
+    (fit_min_n/fit_max_n) or value (fit_min_w/fit_max_w).
+
+    Parameters
+    ----------
+    Sigma_iw : Gf
+               Self-energy.
+    fit_min_n : int, optional, default=int(0.8*len(Sigma_iw.mesh))
+                Matsubara frequency index from which tail fitting should start.
+    fit_max_n : int, optional, default=int(len(Sigma_iw.mesh))
+                Matsubara frequency index at which tail fitting should end.
+    fit_min_w : float, optional
+                Matsubara frequency from which tail fitting should start.
+    fit_max_w : float, optional
+                Matsubara frequency at which tail fitting should end.
+    fit_max_moment : int, optional
+                     Highest moment to fit in the tail of Sigma_iw.
+    fit_known_moments : ``ndarray.shape[order, Sigma_iw[0].target_shape]``, optional, default = None
+                        Known moments of Sigma_iw, given as an numpy ndarray
+
+    Returns
+    -------
+    tail_barr : dict of arr
+                fitted tail of Sigma_iw
+    """
+    from triqs.gf import fit_hermitian_tail_on_window
+
+    # Define default tail quantities
+    if fit_min_w is not None:
+        fit_min_n = int(0.5*(fit_min_w*Sigma_iw.mesh.beta/np.pi - 1.0))
+    if fit_max_w is not None:
+        fit_max_n = int(0.5*(fit_max_w*Sigma_iw.mesh.beta/np.pi - 1.0))
+    if fit_min_n is None:
+        fit_min_n = int(0.8*len(Sigma_iw.mesh)/2)
+    if fit_max_n is None:
+        fit_max_n = int(len(Sigma_iw.mesh)/2)
+    if fit_max_moment is None:
+        fit_max_moment = 3
+
+    if fit_known_moments is None:
+        fit_known_moments = {}
+        for name, sig in Sigma_iw:
+            shape = [0] + list(sig.target_shape)
+            fit_known_moments[name] = np.zeros(shape, dtype=complex) # no known moments
+
+    # Now fit the tails of Sigma_iw and replace the high frequency part with the tail expansion
+    tail_barr = {}
+    for name, sig in Sigma_iw:
+
+        tail, err = fit_hermitian_tail_on_window(
+            sig,
+            n_min = fit_min_n,
+            n_max = fit_max_n,
+            known_moments = fit_known_moments[name],
+            # set max number of pts used in fit larger than mesh size, to use all data in fit
+            n_tail_max = 10 * len(sig.mesh),
+            expansion_order = fit_max_moment
+            )
+        tail_barr[name] = tail
+
+    return tail_barr
+
 class SolverStructure:
 
     r'''
@@ -621,7 +693,7 @@ class SolverStructure:
             mpi.report('impurity levels:', chemical_potential)
 
             if self.general_params['h_int_type'][self.icrsh] == 'dyn_density_density':
-                mpi.report('add dynamic interaction from bdft')
+                mpi.report('add dynamic interaction from AIMBES')
                 # convert 4 idx tensor to two index tensor
                 ish = self.sum_k.inequiv_to_corr[self.icrsh]
                 # prepare dynamic 2 idx parts
@@ -1359,6 +1431,7 @@ class SolverStructure:
             from triqs.gf.dlr_crm_dyson_solver import minimize_dyson
 
             mpi.report('\nCRM Dyson solver to extract Σ impurity\n')
+            self.Sigma_Hartree = {}
             # fit QMC G_tau to DLR
             if mpi.is_master_node():
                 G_dlr = fit_gf_dlr(self.triqs_solver.results.G_tau,
@@ -1383,39 +1456,49 @@ class SolverStructure:
                 # minimize dyson for the first entry of each deg shell
                 self.Sigma_dlr = self.sum_k.block_structure.create_gf(ish=self.icrsh, gf_function=Gf, mesh=mesh_dlr_iw, space='solver')
                 # without any degenerate shells we run the minimization for all blocks
+                tail = _fit_tail_window(Sigma_iw,
+                                        fit_min_n=self.solver_params['fit_min_n'],
+                                        fit_max_n=self.solver_params['fit_max_n'],
+                                        fit_min_w=self.solver_params['fit_min_w'],
+                                        fit_max_w=self.solver_params['fit_max_w'],
+                                        fit_max_moment=self.solver_params['fit_max_moment'],)
                 if self.sum_k.deg_shells[self.icrsh] == []:
                     for block, gf in self.Sigma_dlr:
-                        tail, err = gf.fit_hermitian_tail()
+                        # tail, err = Sigma_iw[block].fit_hermitian_tail()
+                        self.Sigma_Hartree[block] = tail[block][0]
                         np.random.seed(85281)
                         print('Minimizing Dyson via CRM for Σ[block]:', block)
                         gf, _, _ = minimize_dyson(G0_dlr=G0_dlr_iw[block],
                                                   G_dlr=G_dlr[block],
-                                                  Sigma_moments=tail[0:1]
+                                                  Sigma_moments=tail[block][0:1]
                                                     )
                 else:
                     for deg_shell in self.sum_k.deg_shells[self.icrsh]:
                         for i, block in enumerate(deg_shell):
                             if i == 0:
-                                tail, err = Sigma_iw[block].fit_hermitian_tail()
+                                # tail, err = Sigma_iw[block].fit_hermitian_tail()
+                                self.Sigma_Hartree[block] = tail[block][0]
                                 np.random.seed(85281)
                                 print('Minimizing Dyson via CRM for Σ[block]:', block)
                                 self.Sigma_dlr[block], _, _ = minimize_dyson(G0_dlr=G0_dlr_iw[block],
                                                                     G_dlr=G_dlr[block],
-                                                                    Sigma_moments=tail[0:1]
+                                                                    Sigma_moments=tail[block][0:1]
                                                                     )
                                 sol_block = block
                             else:
                                 print(f'Copying result from first block of deg list to {block}')
                                 self.Sigma_dlr[block] << self.Sigma_dlr[sol_block]
+                                self.Sigma_Hartree[block] = tail[block][0]
 
                             self.Sigma_freq[block] = make_gf_imfreq(self.Sigma_dlr[block], n_iw=self.general_params['n_iw'])
-                            self.Sigma_freq[block] += tail[0]
+                            self.Sigma_freq[block] += tail[block][0]
                 print('\n')
 
 
             mpi.barrier()
             self.Sigma_freq = mpi.bcast(self.Sigma_freq)
             self.Sigma_dlr = mpi.bcast(self.Sigma_dlr)
+            self.Sigma_Hartree = mpi.bcast(self.Sigma_Hartree)
             self.G_time_dlr = mpi.bcast(self.G_time_dlr)
             self.G_freq = mpi.bcast(self.G_freq)
         else:

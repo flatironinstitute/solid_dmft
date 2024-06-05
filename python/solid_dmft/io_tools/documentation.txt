@@ -319,6 +319,16 @@ crm_dyson_solver : bool, default = False
         set dlr_wmax and dlr_eps parameters in general section to use
 diag_delta : bool, default = False
         approximate the hybridization function as diagonal when using the delta interface
+fit_max_moment : int, default = None
+        max moment to be fitted. Only used if solver.perform_tail_fit = True
+fit_max_n : int, default = None
+        number of highest matsubara frequency to fit. Only used if solver.perform_tail_fit = True
+fit_max_w : float, default = None
+        highest matsubara frequency to fit. Only used if solver.perform_tail_fit = True
+fit_min_n : int, default = None
+        number of start matsubara frequency to start with. Only used if solver.perform_tail_fit = True
+fit_min_w : float, default = None
+        start matsubara frequency to start with. Only used if solver.perform_tail_fit = True
 improved_estimator : bool, default = False
         measure improved estimators
         Sigma_iw will automatically be calculated via

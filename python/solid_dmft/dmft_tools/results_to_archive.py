@@ -111,6 +111,7 @@ def _compile_information(sum_k, general_params, solver_params, solvers, map_imp_
             if solver_params[isolvsec]['crm_dyson_solver']:
                 write_to_h5['G_time_dlr_{}'.format(icrsh)] = solvers[icrsh].G_time_dlr
                 write_to_h5['Sigma_dlr_{}'.format(icrsh)] = solvers[icrsh].Sigma_dlr
+                write_to_h5['Sigma_Hartree_{}'.format(icrsh)] = solvers[icrsh].Sigma_Hartree
             if general_params['h_int_type'][icrsh] == 'dyn_density_density':
                 write_to_h5['D0_time_{}'.format(icrsh)] = solvers[icrsh].triqs_solver.D0_tau
                 write_to_h5['Jperp_time_{}'.format(icrsh)] = solvers[icrsh].triqs_solver.Jperp_tau

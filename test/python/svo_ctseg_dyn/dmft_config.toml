@@ -31,6 +31,9 @@ n_warmup_cycles = 1e+4
 n_cycles_tot = 1e+6
 off_diag_threshold = 1e-4
 crm_dyson_solver = true
+fit_min_n = 10
+fit_max_n = 60
+fit_max_moment = 4
 n_tau_k = 10001
 
 [gw]
