@@ -126,7 +126,9 @@ def calculate_double_counting(sum_k, density_matrix, general_params, gw_params, 
                 gw_params = mpi.bcast(gw_params)
 
             mesh = MeshDLRImFreq(sum_k.mesh.beta, 'Fermion',
-                                 sum_k.mesh(sum_k.mesh.last_index()).value.imag, gw_params['Uloc_dlr'][icrsh].mesh.eps)
+                                 sum_k.mesh(sum_k.mesh.last_index()).value.imag,
+                                 gw_params['Uloc_dlr'][icrsh].mesh.eps,
+                                 symmetrize=True)
             Gloc_dlr_iw = sum_k.block_structure.create_gf(ish=icrsh, space='sumk', mesh=mesh)
 
             G_loc_sumk = sum_k.block_structure.convert_gf(G_loc_all[icrsh], ish_from=icrsh, space_from='solver', space_to='sumk')

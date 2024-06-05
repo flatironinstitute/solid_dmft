@@ -260,6 +260,7 @@ def calc_W_from_Gloc(Gloc_dlr, U):
         statistic='Boson',
         w_max=Gloc_dlr.mesh.w_max,
         eps=Gloc_dlr.mesh.eps,
+        symmetrize=True
     )
 
     PI_dlr_t = Gf(mesh=mesh_bos, target_shape=[nb] * 4)
@@ -399,12 +400,14 @@ def convert_gw_output(job_h5, gw_h5, it_1e=0, it_2e=0, ha_ev_conv = False):
         statistic='Boson',
         w_max=gw_data['gw_wmax']*conv_fac,
         eps=gw_data['gw_dlr_prec'],
+        symmetrize=True
     )
     gw_data['mesh_dlr_iw_f'] = MeshDLRImFreq(
         beta=gw_data['beta']/conv_fac,
         statistic='Fermion',
         w_max=gw_data['gw_wmax']*conv_fac,
         eps=gw_data['gw_dlr_prec'],
+        symmetrize=True
     )
 
     (
