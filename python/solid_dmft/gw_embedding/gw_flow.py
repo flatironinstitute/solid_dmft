@@ -404,10 +404,20 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
         mpi.report('Actual time for solver: {:.2f} s'.format(timer() - start_time))
 
         # some printout of the obtained density matrices and some basic checks from the unsymmetrized solver output
-        density_shell[ish] = np.real(solvers[ish].G_freq_unsym.total_density())
-        density_tot += density_shell[ish]
-        density_mat_unsym[ish] = solvers[ish].G_freq_unsym.density()
-        density_mat[ish] = solvers[ish].G_freq.density()
+        if solver_params[ish]['type'] == 'ctseg':
+            density_shell[ish] = np.sum(solvers[ish].triqs_solver.results.densities)
+            density_tot += density_shell[ish]
+            density_mat_unsym[ish] = {}
+            for i, (block, norb) in enumerate(sumk.gf_struct_solver[ish].items()):
+                density_mat_unsym[ish][block] = np.zeros((norb,norb))
+                for iorb in range(norb):
+                    density_mat_unsym[ish][block][iorb, iorb] = solvers[ish].triqs_solver.results.densities[i]
+            density_mat[ish] = density_mat_unsym[ish]
+        else:
+            density_shell[ish] = np.real(solvers[ish].G_freq_unsym.total_density())
+            density_tot += density_shell[ish]
+            density_mat_unsym[ish] = solvers[ish].G_freq_unsym.density()
+            density_mat[ish] = solvers[ish].G_freq.density()
         formatter.print_local_density(density_shell[ish], density_shell_pre[ish], density_mat_unsym[ish], sumk.SO)
         mpi.report('')
 
