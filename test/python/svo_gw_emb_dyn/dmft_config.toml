@@ -4,10 +4,10 @@ jobname = "out"
 
 enforce_off_diag = false
 
-n_iw = 20000
-n_tau = 200001
-dlr_wmax = 0.5
-dlr_eps = 1e-8
+n_iw = 1000
+n_tau = 10001
+dlr_wmax = 0.2
+dlr_eps = 1e-6
 
 gw_embedding = true
 h_int_type = "dyn_density_density"
@@ -22,9 +22,14 @@ it_2e = 1
 [solver]
 type = "ctseg"
 n_tau_k = 10001
-length_cycle = 100
+length_cycle = 600
 n_warmup_cycles = 1e+3
 n_cycles_tot = 1e+5
 off_diag_threshold = 1e-5
 diag_delta = false
 crm_dyson_solver = true
+fit_min_n = 10
+fit_max_n = 100
+fit_max_moment = 4
+
+measure_nnt = true

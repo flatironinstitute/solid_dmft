@@ -125,7 +125,7 @@ set (gw_emb_integration_tests
      svo_cthyb_crpa
      svo_ctseg_dyn
      svo_gw_emb_stat
-     # svo_gw_emb_dyn
+     svo_gw_emb_dyn
      )
 
 foreach(test ${gw_emb_integration_tests})

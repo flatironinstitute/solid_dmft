@@ -108,6 +108,12 @@ def _compile_information(sum_k, general_params, solver_params, solvers, map_imp_
             if solver_params[isolvsec]['improved_estimator']:
                 write_to_h5['F_freq_{}'.format(icrsh)] = solvers[icrsh].F_freq
                 write_to_h5['F_time_{}'.format(icrsh)] = solvers[icrsh].F_time
+            if solver_params[isolvsec]['measure_pert_order']:
+                write_to_h5['pert_order_histo_imp_{}'.format(icrsh)] = solvers[icrsh].perturbation_order_histo
+            if solver_params[isolvsec]['measure_nnt']:
+                write_to_h5['O_NN_{}'.format(icrsh)] = solvers[icrsh].triqs_solver.results.nn_tau
+            if solver_params[isolvsec]['measure_statehist']:
+                write_to_h5['state_hist_{}'.format(icrsh)] = solvers[icrsh].state_histogram
             if solver_params[isolvsec]['crm_dyson_solver']:
                 write_to_h5['G_time_dlr_{}'.format(icrsh)] = solvers[icrsh].G_time_dlr
                 write_to_h5['Sigma_dlr_{}'.format(icrsh)] = solvers[icrsh].Sigma_dlr
