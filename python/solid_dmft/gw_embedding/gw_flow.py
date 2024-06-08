@@ -34,6 +34,8 @@ from h5 import HDFArchive
 from triqs.utility import mpi
 from triqs.gf.tools import inverse
 from triqs.gf import (
+    iOmega_n,
+    fit_hermitian_tail,
     Gf,
     BlockGf,
     make_hermitian,
@@ -358,21 +360,32 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
 
             # prepare solver input
             imp_eal = sumk.block_structure.convert_matrix(gw_params['Hloc0'][ish], ish_from=ish, space_from='sumk', space_to='solver')
-            delta_dlr = sumk.block_structure.convert_gf(gw_params['delta_dlr'][ish], ish_from=ish, space_from='sumk', space_to='solver')
-            # fill Delta_time from Delta_freq sumk to solver
-            for name, g0 in delta_dlr:
-                # make non-interacting impurity Hamiltonian hermitian
-                imp_eal[name] = (imp_eal[name] + imp_eal[name].T.conj())/2
+            for name, g0 in G0_dlr:
+                # Estimate the HF shift
+                G0_iw = make_gf_imfreq(g0, n_iw=general_params['n_iw'])
+                Delta_iw = Gf(mesh=G0_iw.mesh, target_shape=G0_iw.target_shape)
+                Delta_iw << iOmega_n - inverse(G0_iw)
+                tail, err = fit_hermitian_tail(Delta_iw)
+                # overwrite H0 using estimation from high-frequency tail
+                imp_eal[name] = tail[0]
+                mpi.report(f"Tail fitting for extracting the HF shift in g_weiss with error {err}")
+
                 if mpi.is_master_node():
                     print('H_loc0[{:2d}] block: {}'.format(ish, name))
                     fmt = '{:11.7f}' * imp_eal[name].shape[0]
                     for block in imp_eal[name]:
                         print((' '*11 + fmt).format(*block.real))
 
+                G0_dlr_iw = make_gf_dlr_imfreq(g0)
+                Delta_dlr_iw = Gf(mesh=G0_dlr_iw.mesh, target_shape=g0.target_shape)
+                for iw in G0_dlr_iw.mesh:
+                    Delta_dlr_iw[iw] = iw.value - inverse(G0_dlr_iw[iw]) - imp_eal[name]
+                Delta_dlr = make_gf_dlr(Delta_dlr_iw)
+                # create now full delta(tau)
+                Delta_tau = make_hermitian(make_gf_imtime(Delta_dlr, n_tau=general_params['n_tau']))
+
                 # without SOC delta_tau needs to be real
                 if not sumk.SO == 1:
-                    # create now full delta(tau)
-                    Delta_tau = make_hermitian(make_gf_imtime(delta_dlr[name], n_tau=general_params['n_tau']))
                     solvers[ish].Delta_time[name] << Delta_tau.real
                 else:
                     solvers[ish].Delta_time[name] << Delta_tau
