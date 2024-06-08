@@ -468,10 +468,15 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
             Sigma_dlr_sumk = sumk.block_structure.convert_gf(Sigma_dlr[ish], ish_from=ish, space_from='solver', space_to='sumk')
             Sigma_Hartree_sumk = sumk.block_structure.convert_matrix(solvers[ish].Sigma_Hartree, ish_from=ish, space_from='solver', space_to='sumk')
             # store Sigma and V_HF in sumk basis on IR mesh
+            ir_nw_half = len(ir_mesh_idx)//2
             for i, (block, gf) in enumerate(Sigma_dlr_sumk):
                 Vhf_imp_sIab[i,ish] = Sigma_Hartree_sumk[block]
-                for iw in range(len(ir_mesh_idx)):
-                    Sigma_ir[iw,i,ish] = gf(iw_mesh(ir_mesh_idx[iw]))
+                # Check if sigma_ir[iw].conj() = sigma_ir[-iw]
+                for n in range(ir_nw_half):
+                    iw_pos = ir_nw_half+n
+                    iw_neg = ir_nw_half-1-n
+                    Sigma_ir[iw_pos,i,ish] = gf(iw_mesh(ir_mesh_idx[iw_pos]))
+                    Sigma_ir[iw_neg,i,ish] = gf(iw_mesh(ir_mesh_idx[iw_pos])).conj()
 
                 if not general_params['magnetic']:
                     break
@@ -494,7 +499,6 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
         with HDFArchive(gw_params['h5_file'],'a') as ar:
             ar[f'downfold_1e/iter{iteration}']['Sigma_imp_wsIab'] = Sigma_ir
             ar[f'downfold_1e/iter{iteration}']['Vhf_imp_sIab'] = Vhf_imp_sIab
-
 
     mpi.report('*** iteration finished ***')
     mpi.report('#'*80)
