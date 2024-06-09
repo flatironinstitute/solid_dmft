@@ -1116,8 +1116,16 @@ class SolverStructure:
                 mpi.report('\nCRM Dyson solver to extract Σ impurity\n')
                 # fit QMC G_tau to DLR
                 if mpi.is_master_node():
-                    G_dlr = fit_gf_dlr(self.triqs_solver.G_tau,
-                                       w_max=self.general_params['dlr_wmax'], eps=self.general_params['dlr_eps'])
+                    if self.solver_params['crm_dlr_wmax'] is not None:
+                        dlr_wmax = self.solver_params['crm_dlr_wmax']
+                    else:
+                        dlr_wmax = self.general_params['dlr_wmax']
+                    if self.solver_params['crm_dlr_eps'] is not None:
+                        dlr_eps = self.solver_params['crm_dlr_eps']
+                    else:
+                        dlr_eps = self.general_params['crm_dlr_eps']
+                    mpi.report(f"crm_dyson_solver with (wmax, eps) = ({dlr_wmax}, {dlr_eps}). ")
+                    G_dlr = fit_gf_dlr(self.triqs_solver.G_tau, w_max=dlr_wmax, eps=dlr_eps)
                     self.G_time_dlr = make_gf_dlr_imtime(G_dlr)
 
                     # assume little error on G0_iw and use to get G0_dlr
@@ -1443,8 +1451,16 @@ class SolverStructure:
             self.Sigma_Hartree = {}
             # fit QMC G_tau to DLR
             if mpi.is_master_node():
-                G_dlr = fit_gf_dlr(self.triqs_solver.results.G_tau,
-                                   w_max=self.general_params['dlr_wmax'], eps=self.general_params['dlr_eps'])
+                if self.solver_params['crm_dlr_wmax'] is not None:
+                    dlr_wmax = self.solver_params['crm_dlr_wmax']
+                else:
+                    dlr_wmax = self.general_params['dlr_wmax']
+                if self.solver_params['crm_dlr_eps'] is not None:
+                    dlr_eps = self.solver_params['crm_dlr_eps']
+                else:
+                    dlr_eps = self.general_params['crm_dlr_eps']
+                mpi.report(f"crm_dyson_solver with (wmax, eps) = ({dlr_wmax}, {dlr_eps}). ")
+                G_dlr = fit_gf_dlr(self.triqs_solver.results.G_tau, w_max=dlr_wmax, eps=dlr_eps)
                 self.G_time_dlr = make_gf_dlr_imtime(G_dlr)
                 self.G_freq = make_gf_imfreq(G_dlr, n_iw=self.general_params['n_iw'])
 
@@ -1480,7 +1496,7 @@ class SolverStructure:
                         gf, _, _ = minimize_dyson(G0_dlr=G0_dlr_iw[block],
                                                   G_dlr=G_dlr[block],
                                                   Sigma_moments=tail[block][0:1]
-                                                    )
+                                                  )
                 else:
                     for deg_shell in self.sum_k.deg_shells[self.icrsh]:
                         for i, block in enumerate(deg_shell):

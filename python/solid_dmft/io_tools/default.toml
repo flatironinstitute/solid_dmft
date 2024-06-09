@@ -65,6 +65,8 @@ w_range = [-10, 10]
 [[solver]]
 type = "cthyb"
 crm_dyson_solver = false
+crm_dlr_wmax = "<none>"
+crm_dlr_eps = "<none>"
 delta_interface = false
 diag_delta = false
 fit_max_moment = "<none>"
@@ -107,6 +109,8 @@ random_seed = "<none>"
 [[solver]]
 type = "ctseg"
 crm_dyson_solver = false
+crm_dlr_wmax = "<none>"
+crm_dlr_eps = "<none>"
 diag_delta = false
 fit_max_moment = "<none>"
 fit_max_n = "<none>"
