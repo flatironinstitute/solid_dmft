@@ -469,6 +469,14 @@ class SolverStructure:
             self.triqs_solver.solve(h_int=self.h_int, **self.triqs_solver_params)
             # *************************************
 
+            # dump Delta_tau constructed internally from cthyb when delta_interface = False
+            if self.general_params['store_solver'] and mpi.is_master_node():
+                with HDFArchive(self.general_params['jobname'] + '/' + self.general_params['seedname'] + '.h5',
+                                'a') as archive:
+                    if not self.solver_params['delta_interface']:
+                        archive['DMFT_input/solver/it_-1'][f'Delta_time_{self.icrsh}'] = self.triqs_solver.Delta_tau
+            mpi.barrier()
+
             # call postprocessing
             self._cthyb_postprocessing()
 
