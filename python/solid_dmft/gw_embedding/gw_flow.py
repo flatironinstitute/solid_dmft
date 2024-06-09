@@ -457,24 +457,24 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
                 sumk.symm_deg_gf(Sigma_dlr_iw[ish],ish=ish)
                 Sigma_dlr[ish] = make_gf_dlr(Sigma_dlr_iw[ish])
 
-                for i, (block, gf) in enumerate(Sigma_dlr[ish]):
-                    # print Hartree shift
-                    print('Σ_HF {}'.format(block))
-                    fmt = '{:11.7f}' * solvers[ish].Sigma_Hartree[block].shape[0]
-                    for vhf in solvers[ish].Sigma_Hartree[block]:
-                        print((' '*11 + fmt).format(*vhf.real))
+            for i, (block, gf) in enumerate(Sigma_dlr[ish]):
+                # print Hartree shift
+                print('Σ_HF {}'.format(block))
+                fmt = '{:11.7f}' * solvers[ish].Sigma_Hartree[block].shape[0]
+                for vhf in solvers[ish].Sigma_Hartree[block]:
+                    print((' '*11 + fmt).format(*vhf.real))
 
-                # average Hartree shift if not magnetic
-                if not general_params['magnetic']:
-                    if general_params['enforce_off_diag']:
-                        solvers[ish].Sigma_Hartree['up_0'] = 0.5*(solvers[ish].Sigma_Hartree['up_0']+
-                                                                  solvers[ish].Sigma_Hartree['down_0'])
-                        solvers[ish].Sigma_Hartree['down_0'] = solvers[ish].Sigma_Hartree['up_0']
-                    else:
-                        for iorb in range(gw_params['n_orb'][ish]):
-                            solvers[ish].Sigma_Hartree[f'up_{iorb}'] = 0.5*(solvers[ish].Sigma_Hartree[f'up_{iorb}']+
-                                                                          solvers[ish].Sigma_Hartree[f'down_{iorb}'])
-                            solvers[ish].Sigma_Hartree[f'down_{iorb}'] = solvers[ish].Sigma_Hartree[f'up_{iorb}']
+            # average Hartree shift if not magnetic
+            if not general_params['magnetic']:
+                if general_params['enforce_off_diag']:
+                    solvers[ish].Sigma_Hartree['up_0'] = 0.5*(solvers[ish].Sigma_Hartree['up_0']+
+                                                              solvers[ish].Sigma_Hartree['down_0'])
+                    solvers[ish].Sigma_Hartree['down_0'] = solvers[ish].Sigma_Hartree['up_0']
+                else:
+                    for iorb in range(gw_params['n_orb'][ish]):
+                        solvers[ish].Sigma_Hartree[f'up_{iorb}'] = 0.5*(solvers[ish].Sigma_Hartree[f'up_{iorb}']+
+                                                                      solvers[ish].Sigma_Hartree[f'down_{iorb}'])
+                        solvers[ish].Sigma_Hartree[f'down_{iorb}'] = solvers[ish].Sigma_Hartree[f'up_{iorb}']
 
             iw_mesh = solvers[ish].Sigma_freq.mesh
             # convert Sigma to sumk basis

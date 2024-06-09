@@ -473,17 +473,13 @@ def convert_gw_output(job_h5, gw_h5, it_1e=0, it_2e=0, ha_ev_conv = False):
     mpi.report(f'writing results in {job_h5}/DMFT_input')
 
     with HDFArchive(job_h5, 'a') as ar:
-        if 'DMFT_results' in ar and 'iteration_count' in ar['DMFT_results']:
-            it = ar['DMFT_results']['iteration_count'] + 1
-        else:
-            it = 1
         if 'DMFT_input' not in ar:
             ar.create_group('DMFT_input')
-        if f'iter{it}' not in ar['DMFT_input']:
-            ar['DMFT_input'].create_group(f'iter{it}')
+        if f'iter{it_1e}' not in ar['DMFT_input']:
+            ar['DMFT_input'].create_group(f'iter{it_1e}')
 
         for key, value in gw_data.items():
-            ar[f'DMFT_input/iter{it}'][key] = value
+            ar[f'DMFT_input/iter{it_1e}'][key] = value
 
     mpi.report(f'finished writing results in {job_h5}/DMFT_input')
     return gw_data, ir_kernel
