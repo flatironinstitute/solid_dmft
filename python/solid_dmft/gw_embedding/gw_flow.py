@@ -494,6 +494,8 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
                 if not general_params['magnetic']:
                     break
 
+            ir_kernel.check_leakage(Sigma_ir, stats='f', name="impurity self-energy", w_input=True)
+
     # Writes results to h5 archive
     if mpi.is_master_node():
         with HDFArchive(general_params['jobname'] + '/' + general_params['seedname'] + '.h5', 'a') as ar:

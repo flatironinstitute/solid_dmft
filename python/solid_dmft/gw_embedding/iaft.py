@@ -1,8 +1,9 @@
+import sys
 import numpy as np
 import sparse_ir
 
 """
-Fourier transform on the imaginary axis based on IR basis and the sparse sampling technique.
+Fourier transform on the imaginary axis based on IR basis and the sparse sampling technique.  
 """
 
 
@@ -84,6 +85,7 @@ class IAFT(object):
         self.Twt_bb = np.dot(Twl_bb, self.Tlt_bb)
 
         print(self)
+        sys.stdout.flush()
 
     def __str__(self):
         return "*******************************\n" \
@@ -94,13 +96,12 @@ class IAFT(object):
                "    - lambda = {}\n" \
                "    - nt_f, nw_f = {}, {}\n" \
                "    - nt_b, nw_b = {}, {}\n" \
-               "*******************************".format(self.prec, self.beta, self.lmbda, self.nt_f, self.nw_f,
+               "*******************************\n".format(self.prec, self.beta, self.lmbda, self.nt_f, self.nw_f,
                                                         self.nt_b, self.nw_b)
 
-    def wn_mesh(self, stats, ir_notation= True):
+    def wn_mesh(self, stats: str, ir_notation: bool = True):
         """
         Return Matsubara frequency indices.
-
         :param stats: str
             statistics: 'f' for fermions and 'b' for bosons
         :param ir_notation: bool
@@ -118,7 +119,7 @@ class IAFT(object):
             wn_mesh = (wn_mesh-1)//2 if stats == 'f' else wn_mesh//2
         return wn_mesh
 
-    def tau_to_w(self, Ot, stats):
+    def tau_to_w(self, Ot, stats: str):
         """
         Fourier transform from imaginary-time axis to Matsubara-frequency axis
         :param Ot: numpy.ndarray
@@ -173,7 +174,7 @@ class IAFT(object):
         Ot = Ot.reshape((Ttw.shape[0],) + Ow_shape[1:])
         return Ot
 
-    def w_interpolate(self, Ow, wn_mesh_interp, stats, ir_notation=True):
+    def w_interpolate(self, Ow, wn_mesh_interp, stats: str, ir_notation: bool = True):
         """
         Interpolate a dynamic object to arbitrary points on the Matsubara axis.
 
@@ -195,7 +196,7 @@ class IAFT(object):
             raise ValueError("Unknown statistics '{}'. "
                              "Acceptable options are 'f' for fermion and 'b' for bosons.".format(stats))
         if ir_notation:
-            wn_indices = wn_mesh_interp
+            wn_indices = np.asarray(wn_mesh_interp)
         else:
             wn_indices = np.array([2*n+1 if stats == 'f' else 2*n for n in wn_mesh_interp], dtype=int)
         Tlw = self.Tlw_ff if stats == 'f' else self.Tlw_bb
@@ -214,7 +215,7 @@ class IAFT(object):
         Ow_interp = Ow_interp.reshape((wn_indices.shape[0],) + Ow_shape[1:])
         return Ow_interp
 
-    def tau_interpolate(self, Ot, tau_mesh_interp, stats):
+    def tau_interpolate(self, Ot, tau_mesh_interp, stats: str):
         """
          Interpolate a dynamic object to arbitrary points on the imaginary-time axis.
 
@@ -244,8 +245,37 @@ class IAFT(object):
         Ot_interp = np.dot(Ttt, Ot)
 
         Ot = Ot.reshape(Ot_shape)
-        Ot_interp = Ot_interp.reshape((tau_mesh_interp.shape[0],) + Ot_shape[1:])
+        Ot_interp = Ot_interp.reshape((np.shape(tau_mesh_interp)[0],) + Ot_shape[1:])
         return Ot_interp
+
+    def check_leakage(self, Ot, stats: str, name: str = "", w_input: bool = False):
+        if w_input:
+            Ot_ = self.w_to_tau(Ot, stats)
+            self.check_leakage(Ot_, stats, name, w_input=False)
+            return
+
+        if stats not in self.statisics:
+            raise ValueError("Unknown statistics '{}'. "
+                             "Acceptable options are 'f' for fermion and 'b' for bosons.".format(stats))
+        nts = self.nt_f if stats == 'f' else self.nt_b
+        Tlt = self.Tlt_ff if stats == 'f' else self.Tlt_bb
+        if nts != Ot.shape[0]:
+            raise ValueError("Inconsistency between nts = {} and Ot.shape[0] = {}".format(nts, Ot.shape[0]))
+
+        # coeff_first
+        O_l0_i = np.einsum('t,ti->i', Tlt[0], Ot.reshape(nts, -1))
+        coeff_first = np.max(np.abs(O_l0_i))
+
+        # coeff_last
+        O_lm2_t = np.einsum('lt,ti->li', Tlt[-2:], Ot.reshape(nts, -1))
+        coeff_last = np.max(np.abs(O_lm2_t))
+
+        leakage = coeff_last/coeff_first
+        print("IAFT leakage of {}: {}".format(name, leakage))
+        if leakage >= 1e-8:
+            print("[WARNING] check_leakage: coeff_last/coeff_first = {} >= 1e-8; "
+                  "coeff_last = {}, coeff_first = {}".format(leakage, coeff_last, coeff_first))
+        sys.stdout.flush()
 
 
 if __name__ == '__main__':
