@@ -485,7 +485,7 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
             ir_nw_half = len(ir_mesh_idx)//2
             for i, (block, gf) in enumerate(Sigma_dlr_sumk):
                 Vhf_imp_sIab[i,ish] = Sigma_Hartree_sumk[block]
-                # Check if sigma_ir[iw].conj() = sigma_ir[-iw]
+                # Make sure sigma_ir[iw].conj() = sigma_ir[-iw]
                 for n in range(ir_nw_half):
                     iw_pos = ir_nw_half+n
                     iw_neg = ir_nw_half-1-n

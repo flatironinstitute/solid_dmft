@@ -92,13 +92,14 @@ def _get_dlr_from_IR(Gf_ir, ir_kernel, mesh_dlr_iw, dim=2):
 
 def check_iaft_accuracy(Aw, ir_kernel, stats,
                         beta, dlr_wmax, dlr_prec, data_name):
-    mpi.report(f'##### Estimating the user-defined (wmax, eps) = ({dlr_wmax}, {dlr_prec}) for the DLR mesh #####\n')
+    mpi.report('============== DLR mesh check ==============\n')
+    mpi.report(f'Estimating accuracy of the user-defined (wmax, eps) = '
+               f'({dlr_wmax}, {dlr_prec}) for the DLR mesh\n')
     ir_imp_kernel = IAFT(beta=beta, lmbda=beta * dlr_wmax, prec=dlr_prec)
     Aw_imp = ir_kernel.w_interpolate(Aw, ir_imp_kernel.wn_mesh('f'), 'f')
 
     ir_imp_kernel.check_leakage(Aw_imp, stats, data_name, w_input=True)
-    mpi.report('#'*80)
-    mpi.report("")
+    mpi.report('=================== done ===================\n')
 
 
 def calc_Sigma_DC_gw(Wloc_dlr, Gloc_dlr, Vloc, verbose=False):

@@ -221,6 +221,12 @@ cthyb
 crm_dyson_solver : bool, default = False
         use CRM Dyson solver to extract Sigma_imp from G(tau) (conflict with legendre_fit and tail_fit)
         set dlr_wmax and dlr_eps parameters in general section to use
+crm_dlr_wmax: float, default = None
+        customized dlr_wmax for the crm_dyson_solver. Only used if crm_dyson_solver = True.
+        Set to dlr_wmax if crm_dlr_wmax = None.
+crm_dlr_eps: float, default = None
+        customized dlr_eps for the crm_dyson_solver. Only used if crm_dyson_solver = True.
+        Set to dlr_eps if crm_dlr_eps = None.
 delta_interface : bool, default = False
         use delta interface in cthyb instead of input G0
 diag_delta : bool, default = False
@@ -317,6 +323,12 @@ ctseg
 crm_dyson_solver : bool, default = False
         use CRM Dyson solver to extract Sigma_imp from G(tau) (conflict with legendre_fit and tail_fit)
         set dlr_wmax and dlr_eps parameters in general section to use
+crm_dlr_wmax: float, default = None
+        customized dlr_wmax for the crm_dyson_solver. Only used if crm_dyson_solver = True.
+        Set to dlr_wmax if crm_dlr_wmax = None.
+crm_dlr_eps: float, default = None
+        customized dlr_eps for the crm_dyson_solver. Only used if crm_dyson_solver = True.
+        Set to dlr_eps if crm_dlr_eps = None.
 diag_delta : bool, default = False
         approximate the hybridization function as diagonal when using the delta interface
 fit_max_moment : int, default = None
