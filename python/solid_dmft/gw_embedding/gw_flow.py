@@ -255,6 +255,7 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
         gw_data, ir_kernel = convert_gw_output(
             general_params['jobname'] + '/' + general_params['seedname'] + '.h5',
             gw_params['h5_file'],
+            general_params['dlr_wmax'], general_params['dlr_eps'],
             it_1e = gw_params['it_1e'],
             it_2e = gw_params['it_2e'],
         )
@@ -362,7 +363,7 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
             imp_eal = sumk.block_structure.convert_matrix(gw_params['Hloc0'][ish], ish_from=ish, space_from='sumk', space_to='solver')
             for name, g0 in G0_dlr:
                 # Estimate the HF shift
-                G0_iw = make_gf_imfreq(g0, n_iw=general_params['n_iw'])
+                G0_iw = solvers[ish].G0_freq[name]
                 Delta_iw = Gf(mesh=G0_iw.mesh, target_shape=G0_iw.target_shape)
                 Delta_iw << iOmega_n - inverse(G0_iw)
                 tail, err = fit_hermitian_tail(Delta_iw)
