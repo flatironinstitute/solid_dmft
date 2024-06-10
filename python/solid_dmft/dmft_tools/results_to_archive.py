@@ -110,6 +110,7 @@ def _compile_information(sum_k, general_params, solver_params, solvers, map_imp_
                 write_to_h5['F_time_{}'.format(icrsh)] = solvers[icrsh].F_time
             if solver_params[isolvsec]['measure_pert_order']:
                 write_to_h5['pert_order_histo_imp_{}'.format(icrsh)] = solvers[icrsh].perturbation_order_histo
+                write_to_h5['avg_order_imp_{}.format(icrsh)'] = solvers[icrsh].avg_pert_order
             if solver_params[isolvsec]['measure_nnt']:
                 write_to_h5['O_NN_{}'.format(icrsh)] = solvers[icrsh].triqs_solver.results.nn_tau
             if solver_params[isolvsec]['measure_statehist']:

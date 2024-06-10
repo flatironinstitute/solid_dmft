@@ -1382,6 +1382,7 @@ class SolverStructure:
         # first print average sign
         if mpi.is_master_node():
             print('\nAverage sign: {}'.format(self.triqs_solver.results.sign))
+
         # get Delta_time from solver
         self.Delta_time << self.triqs_solver.Delta_tau
 
@@ -1511,5 +1512,9 @@ class SolverStructure:
 
         if self.solver_params['measure_pert_order']:
             self.perturbation_order_histo  = self.triqs_solver.results.perturbation_order_histo_Delta
+            bin_vec = np.arange(0, self.perturbation_order_histo.data.shape[0])
+            self.avg_pert_order = np.sum(bin_vec * self.perturbation_order_histo.data[:])
+            if mpi.is_master_node():
+                print(f'Average perturbation order: {self.avg_pert_order}')
 
         return
