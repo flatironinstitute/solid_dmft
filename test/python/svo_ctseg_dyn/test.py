@@ -6,7 +6,7 @@ import triqs.utility.mpi as mpi
 
 import solid_dmft.main as solid
 
-# try ForkTPS import
+# try triqs_ctseg import
 ctseg = importlib.util.find_spec("triqs_ctseg") is not None
 if not ctseg:
     mpi.report('ImportWarning: ctseg needs to be installed to run this test')
