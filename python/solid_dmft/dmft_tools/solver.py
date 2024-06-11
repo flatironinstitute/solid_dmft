@@ -744,6 +744,9 @@ class SolverStructure:
                         archive['DMFT_input/solver/it_-1'][f'Uloc_dlr_2idx_{self.icrsh}'] = Uloc_dlr_2idx
                         archive['DMFT_input/solver/it_-1'][f'Uloc_dlr_2idx_prime_{self.icrsh}'] = Uloc_dlr_2idx_prime
             mpi.barrier()
+
+            # turn of problematic move in ctseg until fixed!
+            self.triqs_solver_params['move_move_segment'] = False
             # Solve the impurity problem for icrsh shell
             # *************************************
             self.triqs_solver.solve(h_int=self.h_int, chemical_potential=chemical_potential, **self.triqs_solver_params)
