@@ -494,8 +494,9 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
 
                 if not general_params['magnetic']:
                     break
-    mpi.report("\nChecking impurity self-energy on the IR mesh...")
-    ir_kernel.check_leakage(Sigma_ir, stats='f', name="impurity self-energy", w_input=True)
+    if mpi.is_master_node():
+        print("\nChecking impurity self-energy on the IR mesh...")
+        ir_kernel.check_leakage(Sigma_ir, stats='f', name="impurity self-energy", w_input=True)
 
     # Writes results to h5 archive
     if mpi.is_master_node():

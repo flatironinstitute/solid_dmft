@@ -1126,7 +1126,7 @@ class SolverStructure:
                     if self.solver_params['crm_dlr_eps'] is not None:
                         dlr_eps = self.solver_params['crm_dlr_eps']
                     else:
-                        dlr_eps = self.general_params['crm_dlr_eps']
+                        dlr_eps = self.general_params['dlr_eps']
                     mpi.report(f"crm_dyson_solver with (wmax, eps) = ({dlr_wmax}, {dlr_eps}). ")
                     G_dlr = fit_gf_dlr(self.triqs_solver.G_tau, w_max=dlr_wmax, eps=dlr_eps)
                     self.G_time_dlr = make_gf_dlr_imtime(G_dlr)
@@ -1461,7 +1461,7 @@ class SolverStructure:
                 if self.solver_params['crm_dlr_eps'] is not None:
                     dlr_eps = self.solver_params['crm_dlr_eps']
                 else:
-                    dlr_eps = self.general_params['crm_dlr_eps']
+                    dlr_eps = self.general_params['dlr_eps']
                 mpi.report(f"crm_dyson_solver with (wmax, eps) = ({dlr_wmax}, {dlr_eps}). ")
                 G_dlr = fit_gf_dlr(self.triqs_solver.results.G_tau, w_max=dlr_wmax, eps=dlr_eps)
                 self.G_time_dlr = make_gf_dlr_imtime(G_dlr)
