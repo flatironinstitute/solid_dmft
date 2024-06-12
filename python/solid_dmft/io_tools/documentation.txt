@@ -87,8 +87,9 @@ h_int_basis : string, default = 'triqs'
 h_int_type : string, mandatory
         interaction type:
 
-        * density_density: used for full d-shell or eg- or t2g-subset
+        * density_density: used for full d-shell or eg- or t2g-subset (with U=F0, J=(F2+F4)/14)
         * kanamori: only physical for the t2g or the eg subset
+        * kanamori_den_den: density density form of Kanamori, but with Kanamori U and J
         * full_slater: used for full d-shell or eg- or t2g-subset
         * ntot: U/2 (Ntot^2 - Ntot) interaction
         * simple_intra: density-density like but only intra orbital with given U value (no rotations applied)

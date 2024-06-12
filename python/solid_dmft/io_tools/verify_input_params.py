@@ -32,6 +32,7 @@ def _verify_input_params_general(params: FullConfig) -> None:
     h_int_type_options = (
         'density_density',
         'kanamori',
+        'kanamori_den_den',
         'full_slater',
         'crpa',
         'crpa_density_density',
@@ -142,7 +143,7 @@ def verify_h5_dependent(sum_k, solver_type_per_imp, general_params):
             '"ratio_F4_F2" only considered for interaction Hamiltonians "density_density" and "slater". '
             'Please set to None for all other Hamiltonians.'
         )
-    if any(h != 'kanamori' and up is not None for h, up in zip(general_params['h_int_type'], general_params['U_prime'])):
+    if any(h not in ('kanamori', 'kanmori_den_den') and up is not None for h, up in zip(general_params['h_int_type'], general_params['U_prime'])):
         raise ValueError(
             '"U_prime" only considered for interaction Hamiltonian "kanamori". ' 'Please set to None for all other Hamiltonians.'
         )

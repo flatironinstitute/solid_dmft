@@ -179,7 +179,7 @@ def _adapt_U_4index_for_SO(Umat_full):
     return Umat_full_SO
 
 
-def _construct_kanamori(sum_k, general_params, solver_type_per_imp, icrsh):
+def _construct_kanamori(sum_k, general_params, solver_type_per_imp, icrsh, den_den=False):
     """
     Constructs the Kanamori interaction Hamiltonian. Only Kanamori does not
     need the full four-index matrix. Therefore, we can construct it directly
@@ -209,17 +209,22 @@ def _construct_kanamori(sum_k, general_params, solver_type_per_imp, icrsh):
         else:
             up = U_prime
             j = general_params['J'][icrsh]
-        h_int = ftps.solver_core.HInt(u=general_params['U'][icrsh], j=j, up=up, dd=False)
+        h_int = ftps.solver_core.HInt(u=general_params['U'][icrsh], j=j, up=up, dd=den_den)
     elif sum_k.SO == 0:
         # Constructs U matrix
         Umat, Upmat = util.U_matrix_kanamori(n_orb=n_orb, U_int=general_params['U'][icrsh],
                                              J_hund=general_params['J'][icrsh],
                                              Up_int=U_prime)
-
-        h_int = util.h_int_kanamori(sum_k.spin_block_names[sum_k.SO], n_orb,
-                                    map_operator_structure=sum_k.sumk_to_solver[icrsh],
-                                    U=Umat, Uprime=Upmat, J_hund=general_params['J'][icrsh],
-                                    H_dump=os.path.join(general_params['jobname'], f'H_imp{icrsh}.txt'))
+        if den_den:
+            h_int = util.h_int_density(sum_k.spin_block_names[sum_k.SO], n_orb,
+                                       map_operator_structure=sum_k.sumk_to_solver[icrsh],
+                                       U=Umat, Uprime=Upmat,
+                                       H_dump=os.path.join(general_params['jobname'], f'H_imp{icrsh}.txt'))
+        else:
+            h_int = util.h_int_kanamori(sum_k.spin_block_names[sum_k.SO], n_orb,
+                                        map_operator_structure=sum_k.sumk_to_solver[icrsh],
+                                        U=Umat, Uprime=Upmat, J_hund=general_params['J'][icrsh],
+                                        H_dump=os.path.join(general_params['jobname'], f'H_imp{icrsh}.txt'))
     else:
         h_int = _construct_kanamori_soc(general_params['U'][icrsh], general_params['J'][icrsh],
                                         n_orb, sum_k.sumk_to_solver[icrsh],
@@ -536,7 +541,11 @@ def construct(sum_k, general_params, solver_type_per_imp,  gw_params=None):
 
         # Kanamori
         if general_params['h_int_type'][icrsh] == 'kanamori':
-            h_int[icrsh] = _construct_kanamori(sum_k, general_params, solver_type_per_imp, icrsh)
+            h_int[icrsh] = _construct_kanamori(sum_k, general_params, solver_type_per_imp, icrsh, den_den=False)
+            continue
+
+        if general_params['h_int_type'][icrsh] == 'kanamori_den_den':
+            h_int[icrsh] = _construct_kanamori(sum_k, general_params, solver_type_per_imp, icrsh, den_den=True)
             continue
 
         # for density density or full slater get full four-index U matrix
