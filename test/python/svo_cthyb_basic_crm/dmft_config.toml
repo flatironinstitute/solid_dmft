@@ -8,8 +8,6 @@ mu_initial_guess = -0.027041
 prec_mu = 0.001
 n_iw = 501
 n_tau = 10001
-dlr_wmax = 4
-dlr_eps = 1e-8
 
 h_int_type = "kanamori"
 U = 8.0
@@ -39,3 +37,5 @@ n_cycles_tot = 1e+4
 imag_threshold = 1e-5
 measure_density_matrix = true
 crm_dyson_solver = true
+crm_dlr_wmax = 4
+crm_dlr_eps = 1e-8

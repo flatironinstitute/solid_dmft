@@ -6,8 +6,8 @@ enforce_off_diag = false
 
 n_iw = 1000
 n_tau = 10001
-dlr_wmax = 0.2
-dlr_eps = 1e-6
+dlr_wmax = 10
+dlr_eps = 1e-10
 
 gw_embedding = true
 h_int_type = "dyn_density_density"
@@ -28,6 +28,8 @@ n_cycles_tot = 1e+5
 off_diag_threshold = 1e-5
 diag_delta = false
 crm_dyson_solver = true
+crm_dlr_wmax = 0.2
+crm_dlr_eps = 1e-6
 fit_min_n = 10
 fit_max_n = 100
 fit_max_moment = 4

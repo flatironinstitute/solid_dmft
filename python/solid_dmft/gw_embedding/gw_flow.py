@@ -34,6 +34,8 @@ from h5 import HDFArchive
 from triqs.utility import mpi
 from triqs.gf.tools import inverse
 from triqs.gf import (
+    iOmega_n,
+    fit_hermitian_tail,
     Gf,
     BlockGf,
     make_hermitian,
@@ -253,6 +255,7 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
         gw_data, ir_kernel = convert_gw_output(
             general_params['jobname'] + '/' + general_params['seedname'] + '.h5',
             gw_params['h5_file'],
+            general_params['dlr_wmax'], general_params['dlr_eps'],
             it_1e = gw_params['it_1e'],
             it_2e = gw_params['it_2e'],
         )
@@ -358,21 +361,32 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
 
             # prepare solver input
             imp_eal = sumk.block_structure.convert_matrix(gw_params['Hloc0'][ish], ish_from=ish, space_from='sumk', space_to='solver')
-            delta_dlr = sumk.block_structure.convert_gf(gw_params['delta_dlr'][ish], ish_from=ish, space_from='sumk', space_to='solver')
-            # fill Delta_time from Delta_freq sumk to solver
-            for name, g0 in delta_dlr:
-                # make non-interacting impurity Hamiltonian hermitian
-                imp_eal[name] = (imp_eal[name] + imp_eal[name].T.conj())/2
+            for name, g0 in G0_dlr:
+                # Estimate the HF shift
+                G0_iw = solvers[ish].G0_freq[name]
+                Delta_iw = Gf(mesh=G0_iw.mesh, target_shape=G0_iw.target_shape)
+                Delta_iw << iOmega_n - inverse(G0_iw)
+                tail, err = fit_hermitian_tail(Delta_iw)
+                # overwrite H0 using estimation from high-frequency tail
+                imp_eal[name] = tail[0]
+                mpi.report(f"Tail fitting for extracting the HF shift in g_weiss with error {err}")
+
                 if mpi.is_master_node():
                     print('H_loc0[{:2d}] block: {}'.format(ish, name))
                     fmt = '{:11.7f}' * imp_eal[name].shape[0]
                     for block in imp_eal[name]:
                         print((' '*11 + fmt).format(*block.real))
 
+                G0_dlr_iw = make_gf_dlr_imfreq(g0)
+                Delta_dlr_iw = Gf(mesh=G0_dlr_iw.mesh, target_shape=g0.target_shape)
+                for iw in G0_dlr_iw.mesh:
+                    Delta_dlr_iw[iw] = iw.value - inverse(G0_dlr_iw[iw]) - imp_eal[name]
+                Delta_dlr = make_gf_dlr(Delta_dlr_iw)
+                # create now full delta(tau)
+                Delta_tau = make_hermitian(make_gf_imtime(Delta_dlr, n_tau=general_params['n_tau']))
+
                 # without SOC delta_tau needs to be real
                 if not sumk.SO == 1:
-                    # create now full delta(tau)
-                    Delta_tau = make_hermitian(make_gf_imtime(delta_dlr[name], n_tau=general_params['n_tau']))
                     solvers[ish].Delta_time[name] << Delta_tau.real
                 else:
                     solvers[ish].Delta_time[name] << Delta_tau
@@ -444,37 +458,45 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
                 sumk.symm_deg_gf(Sigma_dlr_iw[ish],ish=ish)
                 Sigma_dlr[ish] = make_gf_dlr(Sigma_dlr_iw[ish])
 
-                for i, (block, gf) in enumerate(Sigma_dlr[ish]):
-                    # print Hartree shift
-                    print('Σ_HF {}'.format(block))
-                    fmt = '{:11.7f}' * solvers[ish].Sigma_Hartree[block].shape[0]
-                    for vhf in solvers[ish].Sigma_Hartree[block]:
-                        print((' '*11 + fmt).format(*vhf.real))
+            for i, (block, gf) in enumerate(Sigma_dlr[ish]):
+                # print Hartree shift
+                print('Σ_HF {}'.format(block))
+                fmt = '{:11.7f}' * solvers[ish].Sigma_Hartree[block].shape[0]
+                for vhf in solvers[ish].Sigma_Hartree[block]:
+                    print((' '*11 + fmt).format(*vhf.real))
 
-                # average Hartree shift if not magnetic
-                if not general_params['magnetic']:
-                    if general_params['enforce_off_diag']:
-                        solvers[ish].Sigma_Hartree['up_0'] = 0.5*(solvers[ish].Sigma_Hartree['up_0']+
-                                                                  solvers[ish].Sigma_Hartree['down_0'])
-                        solvers[ish].Sigma_Hartree['down_0'] = solvers[ish].Sigma_Hartree['up_0']
-                    else:
-                        for iorb in range(gw_params['n_orb'][ish]):
-                            solvers[ish].Sigma_Hartree[f'up_{iorb}'] = 0.5*(solvers[ish].Sigma_Hartree[f'up_{iorb}']+
-                                                                          solvers[ish].Sigma_Hartree[f'down_{iorb}'])
-                            solvers[ish].Sigma_Hartree[f'down_{iorb}'] = solvers[ish].Sigma_Hartree[f'up_{iorb}']
+            # average Hartree shift if not magnetic
+            if not general_params['magnetic']:
+                if general_params['enforce_off_diag']:
+                    solvers[ish].Sigma_Hartree['up_0'] = 0.5*(solvers[ish].Sigma_Hartree['up_0']+
+                                                              solvers[ish].Sigma_Hartree['down_0'])
+                    solvers[ish].Sigma_Hartree['down_0'] = solvers[ish].Sigma_Hartree['up_0']
+                else:
+                    for iorb in range(gw_params['n_orb'][ish]):
+                        solvers[ish].Sigma_Hartree[f'up_{iorb}'] = 0.5*(solvers[ish].Sigma_Hartree[f'up_{iorb}']+
+                                                                      solvers[ish].Sigma_Hartree[f'down_{iorb}'])
+                        solvers[ish].Sigma_Hartree[f'down_{iorb}'] = solvers[ish].Sigma_Hartree[f'up_{iorb}']
 
             iw_mesh = solvers[ish].Sigma_freq.mesh
             # convert Sigma to sumk basis
             Sigma_dlr_sumk = sumk.block_structure.convert_gf(Sigma_dlr[ish], ish_from=ish, space_from='solver', space_to='sumk')
             Sigma_Hartree_sumk = sumk.block_structure.convert_matrix(solvers[ish].Sigma_Hartree, ish_from=ish, space_from='solver', space_to='sumk')
             # store Sigma and V_HF in sumk basis on IR mesh
+            ir_nw_half = len(ir_mesh_idx)//2
             for i, (block, gf) in enumerate(Sigma_dlr_sumk):
                 Vhf_imp_sIab[i,ish] = Sigma_Hartree_sumk[block]
-                for iw in range(len(ir_mesh_idx)):
-                    Sigma_ir[iw,i,ish] = gf(iw_mesh(ir_mesh_idx[iw]))
+                # Make sure sigma_ir[iw].conj() = sigma_ir[-iw]
+                for n in range(ir_nw_half):
+                    iw_pos = ir_nw_half+n
+                    iw_neg = ir_nw_half-1-n
+                    Sigma_ir[iw_pos,i,ish] = gf(iw_mesh(ir_mesh_idx[iw_pos]))
+                    Sigma_ir[iw_neg,i,ish] = gf(iw_mesh(ir_mesh_idx[iw_pos])).conj()
 
                 if not general_params['magnetic']:
                     break
+    if mpi.is_master_node():
+        print("\nChecking impurity self-energy on the IR mesh...")
+        ir_kernel.check_leakage(Sigma_ir, stats='f', name="impurity self-energy", w_input=True)
 
     # Writes results to h5 archive
     if mpi.is_master_node():
@@ -494,7 +516,6 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
         with HDFArchive(gw_params['h5_file'],'a') as ar:
             ar[f'downfold_1e/iter{iteration}']['Sigma_imp_wsIab'] = Sigma_ir
             ar[f'downfold_1e/iter{iteration}']['Vhf_imp_sIab'] = Vhf_imp_sIab
-
 
     mpi.report('*** iteration finished ***')
     mpi.report('#'*80)

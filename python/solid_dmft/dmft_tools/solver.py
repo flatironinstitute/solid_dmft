@@ -469,6 +469,14 @@ class SolverStructure:
             self.triqs_solver.solve(h_int=self.h_int, **self.triqs_solver_params)
             # *************************************
 
+            # dump Delta_tau constructed internally from cthyb when delta_interface = False
+            if self.general_params['store_solver'] and mpi.is_master_node():
+                with HDFArchive(self.general_params['jobname'] + '/' + self.general_params['seedname'] + '.h5',
+                                'a') as archive:
+                    if not self.solver_params['delta_interface']:
+                        archive['DMFT_input/solver/it_-1'][f'Delta_time_{self.icrsh}'] = self.triqs_solver.Delta_tau
+            mpi.barrier()
+
             # call postprocessing
             self._cthyb_postprocessing()
 
@@ -1111,8 +1119,16 @@ class SolverStructure:
                 mpi.report('\nCRM Dyson solver to extract Σ impurity\n')
                 # fit QMC G_tau to DLR
                 if mpi.is_master_node():
-                    G_dlr = fit_gf_dlr(self.triqs_solver.G_tau,
-                                       w_max=self.general_params['dlr_wmax'], eps=self.general_params['dlr_eps'])
+                    if self.solver_params['crm_dlr_wmax'] is not None:
+                        dlr_wmax = self.solver_params['crm_dlr_wmax']
+                    else:
+                        dlr_wmax = self.general_params['dlr_wmax']
+                    if self.solver_params['crm_dlr_eps'] is not None:
+                        dlr_eps = self.solver_params['crm_dlr_eps']
+                    else:
+                        dlr_eps = self.general_params['dlr_eps']
+                    mpi.report(f"crm_dyson_solver with (wmax, eps) = ({dlr_wmax}, {dlr_eps}). ")
+                    G_dlr = fit_gf_dlr(self.triqs_solver.G_tau, w_max=dlr_wmax, eps=dlr_eps)
                     self.G_time_dlr = make_gf_dlr_imtime(G_dlr)
 
                     # assume little error on G0_iw and use to get G0_dlr
@@ -1438,8 +1454,16 @@ class SolverStructure:
             self.Sigma_Hartree = {}
             # fit QMC G_tau to DLR
             if mpi.is_master_node():
-                G_dlr = fit_gf_dlr(self.triqs_solver.results.G_tau,
-                                   w_max=self.general_params['dlr_wmax'], eps=self.general_params['dlr_eps'])
+                if self.solver_params['crm_dlr_wmax'] is not None:
+                    dlr_wmax = self.solver_params['crm_dlr_wmax']
+                else:
+                    dlr_wmax = self.general_params['dlr_wmax']
+                if self.solver_params['crm_dlr_eps'] is not None:
+                    dlr_eps = self.solver_params['crm_dlr_eps']
+                else:
+                    dlr_eps = self.general_params['dlr_eps']
+                mpi.report(f"crm_dyson_solver with (wmax, eps) = ({dlr_wmax}, {dlr_eps}). ")
+                G_dlr = fit_gf_dlr(self.triqs_solver.results.G_tau, w_max=dlr_wmax, eps=dlr_eps)
                 self.G_time_dlr = make_gf_dlr_imtime(G_dlr)
                 self.G_freq = make_gf_imfreq(G_dlr, n_iw=self.general_params['n_iw'])
 
@@ -1475,7 +1499,7 @@ class SolverStructure:
                         gf, _, _ = minimize_dyson(G0_dlr=G0_dlr_iw[block],
                                                   G_dlr=G_dlr[block],
                                                   Sigma_moments=tail[block][0:1]
-                                                    )
+                                                  )
                 else:
                     for deg_shell in self.sum_k.deg_shells[self.icrsh]:
                         for i, block in enumerate(deg_shell):

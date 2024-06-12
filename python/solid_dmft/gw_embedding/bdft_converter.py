@@ -90,6 +90,18 @@ def _get_dlr_from_IR(Gf_ir, ir_kernel, mesh_dlr_iw, dim=2):
     return Gf_dlr
 
 
+def check_iaft_accuracy(Aw, ir_kernel, stats,
+                        beta, dlr_wmax, dlr_prec, data_name):
+    mpi.report('============== DLR mesh check ==============\n')
+    mpi.report(f'Estimating accuracy of the user-defined (wmax, eps) = '
+               f'({dlr_wmax}, {dlr_prec}) for the DLR mesh\n')
+    ir_imp_kernel = IAFT(beta=beta, lmbda=beta * dlr_wmax, prec=dlr_prec)
+    Aw_imp = ir_kernel.w_interpolate(Aw, ir_imp_kernel.wn_mesh('f'), 'f')
+
+    ir_imp_kernel.check_leakage(Aw_imp, stats, data_name, w_input=True)
+    mpi.report('=================== done ===================\n')
+
+
 def calc_Sigma_DC_gw(Wloc_dlr, Gloc_dlr, Vloc, verbose=False):
     r"""
     Calculate the double counting part of the self-energy from the screened Coulomb interaction
@@ -288,7 +300,8 @@ def calc_W_from_Gloc(Gloc_dlr, U):
     return W_dlr
 
 
-def convert_gw_output(job_h5, gw_h5, it_1e=0, it_2e=0, ha_ev_conv = False):
+def convert_gw_output(job_h5, gw_h5, dlr_wmax=None, dlr_eps=None,
+                      it_1e=0, it_2e=0, ha_ev_conv = False):
     """
     read bdft output and convert to triqs Gf DLR objects
 
@@ -298,6 +311,10 @@ def convert_gw_output(job_h5, gw_h5, it_1e=0, it_2e=0, ha_ev_conv = False):
         path to solid_dmft job file
     gw_h5: string
         path to GW checkpoint file for AIMBES code
+    dlr_wmax: float
+        wmax for dlr mesh, defaults to the wmax from the IR basis
+    dlr_eps: float
+        precision for dlr mesh, defaults to the precision from the IR basis
     it_1e: int, optional
         iteration to read from gw_h5 calculation for 1e downfolding, defaults to last iteration
     it_2e: int, optional
@@ -338,6 +355,7 @@ def convert_gw_output(job_h5, gw_h5, it_1e=0, it_2e=0, ha_ev_conv = False):
         gw_data['beta'] = ar['imaginary_fourier_transform']['beta']
         gw_data['lam'] = ar['imaginary_fourier_transform']['lambda']
         gw_data['gw_wmax'] = gw_data['lam'] / gw_data['beta']
+        gw_data['gw_dlr_wmax'] = gw_data['gw_wmax'] if dlr_wmax is None else dlr_wmax
         gw_data['number_of_spins'] = ar['system/number_of_spins']
         assert gw_data['number_of_spins'] == 1, 'spin calculations not yet supported in converter'
 
@@ -345,13 +363,13 @@ def convert_gw_output(job_h5, gw_h5, it_1e=0, it_2e=0, ha_ev_conv = False):
         if prec == 'high':
             # set to highest DLR precision possible
             gw_data['gw_ir_prec'] = 1e-15
-            gw_data['gw_dlr_prec'] = 1e-13
+            gw_data['gw_dlr_prec'] = 1e-13 if dlr_eps is None else dlr_eps
         elif prec == 'mid':
             gw_data['gw_ir_prec'] = 1e-10
-            gw_data['gw_dlr_prec'] = 1e-10
+            gw_data['gw_dlr_prec'] = 1e-10 if dlr_eps is None else dlr_eps
         elif prec == 'low':
             gw_data['gw_ir_prec'] = 1e-6
-            gw_data['gw_dlr_prec'] = 1e-6
+            gw_data['gw_dlr_prec'] = 1e-6 if dlr_eps is None else dlr_eps
 
         # 1 particle properties
         g_weiss_wsIab = ar[f'downfold_1e/iter{it_1e}']['g_weiss_wsIab']
@@ -393,19 +411,26 @@ def convert_gw_output(job_h5, gw_h5, it_1e=0, it_2e=0, ha_ev_conv = False):
     # get IR object
     mpi.report('create IR kernel and convert to DLR')
     # create IR kernel
+    mpi.report("")
     ir_kernel = IAFT(beta=gw_data['beta'], lmbda=gw_data['lam'], prec=gw_data['gw_ir_prec'])
+
+    if dlr_wmax is not None or dlr_eps is not None:
+        # check user-defined dlr_wmax and dlr_eps for the impurity
+        check_iaft_accuracy(g_weiss_wsIab, ir_kernel, 'f',
+                            gw_data['beta'], gw_data['gw_dlr_wmax'], gw_data['gw_dlr_prec'],
+                            "fermionic Weiss field g")
 
     gw_data['mesh_dlr_iw_b'] = MeshDLRImFreq(
         beta=gw_data['beta']/conv_fac,
         statistic='Boson',
-        w_max=gw_data['gw_wmax']*conv_fac,
+        w_max=gw_data['gw_dlr_wmax']*conv_fac,
         eps=gw_data['gw_dlr_prec'],
         symmetrize=True
     )
     gw_data['mesh_dlr_iw_f'] = MeshDLRImFreq(
         beta=gw_data['beta']/conv_fac,
         statistic='Fermion',
-        w_max=gw_data['gw_wmax']*conv_fac,
+        w_max=gw_data['gw_dlr_wmax']*conv_fac,
         eps=gw_data['gw_dlr_prec'],
         symmetrize=True
     )
@@ -473,17 +498,13 @@ def convert_gw_output(job_h5, gw_h5, it_1e=0, it_2e=0, ha_ev_conv = False):
     mpi.report(f'writing results in {job_h5}/DMFT_input')
 
     with HDFArchive(job_h5, 'a') as ar:
-        if 'DMFT_results' in ar and 'iteration_count' in ar['DMFT_results']:
-            it = ar['DMFT_results']['iteration_count'] + 1
-        else:
-            it = 1
         if 'DMFT_input' not in ar:
             ar.create_group('DMFT_input')
-        if f'iter{it}' not in ar['DMFT_input']:
-            ar['DMFT_input'].create_group(f'iter{it}')
+        if f'iter{it_1e}' not in ar['DMFT_input']:
+            ar['DMFT_input'].create_group(f'iter{it_1e}')
 
         for key, value in gw_data.items():
-            ar[f'DMFT_input/iter{it}'][key] = value
+            ar[f'DMFT_input/iter{it_1e}'][key] = value
 
     mpi.report(f'finished writing results in {job_h5}/DMFT_input')
     return gw_data, ir_kernel
