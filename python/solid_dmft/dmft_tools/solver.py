@@ -140,7 +140,7 @@ def _fit_tail_window(
     tail_barr : dict of arr
                 fitted tail of Sigma_iw
     """
-    from triqs.gf import fit_hermitian_tail_on_window
+    from triqs.gf.gf_fnt import fit_hermitian_tail_on_window, replace_by_tail
 
     # Define default tail quantities
     if fit_min_w is not None:
@@ -162,7 +162,8 @@ def _fit_tail_window(
 
     # Now fit the tails of Sigma_iw and replace the high frequency part with the tail expansion
     tail_barr = {}
-    for name, sig in Sigma_iw:
+    Sigma_fit = Sigma_iw.copy()
+    for name, sig in Sigma_fit:
 
         tail, err = fit_hermitian_tail_on_window(
             sig,
@@ -174,8 +175,9 @@ def _fit_tail_window(
             expansion_order = fit_max_moment
             )
         tail_barr[name] = tail
+        replace_by_tail(sig, tail, n_min=fit_min_n)
 
-    return tail_barr
+    return Sigma_fit, tail_barr
 
 class SolverStructure:
 
@@ -1427,6 +1429,19 @@ class SolverStructure:
             self.G_l << legendre_filter.apply(self.G_time, self.solver_params['n_l'])
             # get G_time, G_freq, Sigma_freq from G_l
             set_Gs_from_G_l()
+        elif self.solver_params['perform_tail_fit']:
+            self.Sigma_freq = inverse(self.G0_freq) - inverse(self.G_freq)
+            # without any degenerate shells we run the minimization for all blocks
+            self.Sigma_freq, tail = _fit_tail_window(self.Sigma_freq,
+                                                fit_min_n=self.solver_params['fit_min_n'],
+                                                fit_max_n=self.solver_params['fit_max_n'],
+                                                fit_min_w=self.solver_params['fit_min_w'],
+                                                fit_max_w=self.solver_params['fit_max_w'],
+                                                fit_max_moment=self.solver_params['fit_max_moment'],)
+            self.Sigma_Hartree = {}
+            for block in tail.keys():
+                self.Sigma_Hartree[block] = tail[block][0]
+
         # if improved estimators are turned on calc Sigma from F_tau, otherwise:
         elif self.solver_params['improved_estimator']:
             self.F_freq = self.G_freq.copy()
@@ -1484,7 +1499,7 @@ class SolverStructure:
                 # minimize dyson for the first entry of each deg shell
                 self.Sigma_dlr = self.sum_k.block_structure.create_gf(ish=self.icrsh, gf_function=Gf, mesh=mesh_dlr_iw, space='solver')
                 # without any degenerate shells we run the minimization for all blocks
-                tail = _fit_tail_window(Sigma_iw,
+                _, tail = _fit_tail_window(Sigma_iw,
                                         fit_min_n=self.solver_params['fit_min_n'],
                                         fit_max_n=self.solver_params['fit_max_n'],
                                         fit_min_w=self.solver_params['fit_min_w'],

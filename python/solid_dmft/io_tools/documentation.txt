@@ -372,6 +372,8 @@ n_warmup_cycles : int, mandatory
         number of warmup cycles before real measurement sets in
 off_diag_threshold : float, default = 0.0
         threshold for off-diag elements in Hloc0
+perform_tail_fit : bool, default = False
+        tail fitting if legendre is off?
 random_seed : str, default = None
         if None, uses default seed by triqs.
         If specified the int will be used for random seeds. Careful, this will give the same random

@@ -32,9 +32,9 @@ import numpy as np
 
 from h5 import HDFArchive
 from triqs.utility import mpi
-from triqs.gf.tools import inverse
 from triqs.gf import (
     iOmega_n,
+    inverse,
     fit_hermitian_tail,
     Gf,
     BlockGf,

@@ -131,6 +131,7 @@ n_l = "<none>"
 n_tau_k = 10001
 n_warmup_cycles = "<no default>"
 off_diag_threshold = 0.0
+perform_tail_fit = true
 random_seed = "<none>"
 
 [[solver]]

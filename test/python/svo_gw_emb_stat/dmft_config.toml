@@ -6,8 +6,8 @@ enforce_off_diag = false
 
 n_iw = 20000
 n_tau = 200001
-dlr_wmax = 0.5
-dlr_eps = 1e-8
+dlr_wmax = 20
+dlr_eps = 1e-10
 
 gw_embedding = true
 h_int_type = "crpa_density_density"
@@ -20,17 +20,13 @@ it_1e = 1
 it_2e = 1
 
 [solver]
-type = "cthyb"
+type = "ctseg"
 length_cycle = 120
 n_warmup_cycles = 1e+3
 n_cycles_tot = 5e+5
 off_diag_threshold = 1e-5
-imag_threshold = 1e-4
-delta_interface = false
 diag_delta = false
-measure_density_matrix = true
-crm_dyson_solver = true
-# perform_tail_fit = true
-# fit_max_moment = 4
-# fit_min_w = 0.2
-# fit_max_w = 0.8
+perform_tail_fit = true
+fit_max_moment = 4
+fit_min_w = 0.2
+fit_max_w = 0.8
