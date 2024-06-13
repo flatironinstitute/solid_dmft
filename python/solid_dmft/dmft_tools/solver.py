@@ -513,6 +513,7 @@ class SolverStructure:
                 self.h_loc_diagonalization = self.triqs_solver.ad
                 # get moments
                 from triqs_cthyb.tail_fit import sigma_high_frequency_moments, green_high_frequency_moments
+                from triqs_cthyb.util import orbital_occupations
                 self.Sigma_moments = sigma_high_frequency_moments(self.density_matrix,
                                                  self.h_loc_diagonalization,
                                                  self.sum_k.gf_struct_solver_list[self.icrsh],
@@ -523,6 +524,10 @@ class SolverStructure:
                                                  self.h_loc_diagonalization,
                                                  self.sum_k.gf_struct_solver_list[self.icrsh],
                                                  self.h_int
+                                                 )
+                self.orbital_occupations = orbital_occupations(self.density_matrix,
+                                                 self.sum_k.gf_struct_solver_list[self.icrsh],
+                                                 self.h_loc_diagonalization
                                                  )
 
             # *************************************
@@ -1200,6 +1205,7 @@ class SolverStructure:
             self.Sigma_moments = self.triqs_solver.Sigma_moments
             self.Sigma_Hartree = self.triqs_solver.Sigma_Hartree
             self.G_moments = self.triqs_solver.G_moments
+            self.orbital_occupations = self.triqs_solver.orbital_occupations
 
         if self.solver_params['measure_pert_order']:
             self.perturbation_order = self.triqs_solver.perturbation_order
@@ -1410,6 +1416,13 @@ class SolverStructure:
         self.G_time << self.triqs_solver.results.G_tau
         self.sum_k.symm_deg_gf(self.G_time, ish=self.icrsh)
 
+        # get occupation matrix
+        self.orbital_occupations = {bl: np.zeros((bl_size,bl_size)) for bl, bl_size in self.sum_k.gf_struct_solver_list[self.icrsh]}
+        for i, (block, norb) in enumerate(self.sum_k.gf_struct_solver[self.icrsh].items()):
+            self.orbital_occupations[block] = np.zeros((norb,norb))
+            for iorb in range(norb):
+                self.orbital_occupations[block][iorb, iorb] = self.triqs_solver.results.densities[i]
+
         if mpi.is_master_node():
             # create empty moment container (list of np.arrays)
             Gf_known_moments = make_zero_tail(self.G_freq,n_moments=2)
@@ -1441,6 +1454,9 @@ class SolverStructure:
             self.Sigma_Hartree = {}
             for block in tail.keys():
                 self.Sigma_Hartree[block] = tail[block][0]
+
+            # recompute G_freq from Sigma with fitted tail
+            self.G_freq = inverse(inverse(self.G0_freq) - self.Sigma_freq)
 
         # if improved estimators are turned on calc Sigma from F_tau, otherwise:
         elif self.solver_params['improved_estimator']:
@@ -1535,6 +1551,9 @@ class SolverStructure:
 
                             self.Sigma_freq[block] = make_gf_imfreq(self.Sigma_dlr[block], n_iw=self.general_params['n_iw'])
                             self.Sigma_freq[block] += tail[block][0]
+
+                # recompute G_freq from Sigma with fitted tail
+                self.G_freq = inverse(inverse(self.G0_freq) - self.Sigma_freq)
                 print('\n')
 
 

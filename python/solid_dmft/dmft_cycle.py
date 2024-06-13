@@ -740,10 +740,21 @@ def _dmft_step(sum_k, solvers, it, general_params,
             mpi.report('Actual time for solver: {:.2f} s'.format(timer() - start_time))
 
         # some printout of the obtained density matrices and some basic checks from the unsymmetrized solver output
-        density_shell[icrsh] = np.real(solvers[icrsh].G_freq_unsym.total_density())
-        density_tot += density_shell[icrsh]*shell_multiplicity[icrsh]
-        density_mat_unsym[icrsh] = solvers[icrsh].G_freq_unsym.density()
-        density_mat[icrsh] = solvers[icrsh].G_freq.density()
+        if ((solver_type_per_imp[icrsh] == 'cthyb' and solvers[icrsh].solver_params['measure_density_matrix']) or
+             solver_type_per_imp[icrsh] == 'ctseg' or
+            (solver_type_per_imp[icrsh] == 'hubbardI' and solvers[icrsh].solver_params['measure_density_matrix'])):
+            mpi.report('\nExtracting impurity occupations from measured density matrix.')
+            for block, occ_mat in solvers[icrsh].orbital_occupations.items():
+                density_shell[icrsh] += np.trace(occ_mat)
+            density_tot += density_shell[icrsh]*shell_multiplicity[icrsh]
+            density_mat_unsym[icrsh] = solvers[icrsh].orbital_occupations
+            density_mat[icrsh] = density_mat_unsym[icrsh].copy()
+            sum_k.symm_deg_gf(density_mat[icrsh], ish=icrsh)
+        else:
+            density_shell[icrsh] = np.real(solvers[icrsh].G_freq_unsym.total_density())
+            density_tot += density_shell[icrsh]*shell_multiplicity[icrsh]
+            density_mat_unsym[icrsh] = solvers[icrsh].G_freq_unsym.density()
+            density_mat[icrsh] = solvers[icrsh].G_freq.density()
         formatter.print_local_density(density_shell[icrsh], density_shell_pre[icrsh],
                                       density_mat_unsym[icrsh], sum_k.SO)
 

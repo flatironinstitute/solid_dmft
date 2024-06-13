@@ -1,0 +1,34 @@
+[general]
+seedname = "inp"
+jobname = "out"
+enforce_off_diag = false
+block_threshold= 0.001
+mu_initial_guess = -0.027041
+
+prec_mu = 0.001
+n_iw = 501
+n_tau = 10001
+
+h_int_type = "kanamori_den_den"
+U = 8.0
+J = 0.65
+
+store_solver = true
+
+beta = 10
+
+n_iter_dmft = 1
+
+dc_type = 1
+dc = true
+dc_dmft = false
+
+
+[solver]
+type = "ctseg"
+length_cycle = 60
+n_warmup_cycles = 1e+4
+n_cycles_tot = 1e+6
+crm_dyson_solver = true
+crm_dlr_wmax = 4
+crm_dlr_eps = 1e-8

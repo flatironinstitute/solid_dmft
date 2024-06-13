@@ -9,7 +9,7 @@ prec_mu = 0.001
 n_iw = 501
 n_tau = 10001
 
-h_int_type = "kanamori_den_den"
+h_int_type = "kanamori"
 U = 8.0
 J = 0.65
 

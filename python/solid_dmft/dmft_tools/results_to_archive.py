@@ -59,6 +59,8 @@ def _compile_information(sum_k, general_params, solver_params, solvers, map_imp_
                     write_to_h5['Sigma_moments_{}'.format(icrsh)] = solvers[icrsh].Sigma_moments
                     write_to_h5['G_moments_{}'.format(icrsh)] = solvers[icrsh].G_moments
                     write_to_h5['Sigma_Hartree_{}'.format(icrsh)] = solvers[icrsh].Sigma_Hartree
+                    write_to_h5['orbital_occupations_{}'.format(icrsh)] = solvers[icrsh].orbital_occupations
+
 
         elif solver_type_per_imp[icrsh] == 'ftps':
             write_to_h5['Delta_freq_{}'.format(icrsh)] = solvers[icrsh].Delta_freq
@@ -102,6 +104,7 @@ def _compile_information(sum_k, general_params, solver_params, solvers, map_imp_
 
         if solver_type_per_imp[icrsh] == 'ctseg':
             # if legendre was set, that we have both now!
+            write_to_h5['orbital_occupations_{}'.format(icrsh)] = solvers[icrsh].orbital_occupations
             if (solver_params[isolvsec]['legendre_fit']):
                 write_to_h5['G_time_orig_{}'.format(icrsh)] = solvers[icrsh].G_time_orig
                 write_to_h5['Gimp_l_{}'.format(icrsh)] = solvers[icrsh].G_l
