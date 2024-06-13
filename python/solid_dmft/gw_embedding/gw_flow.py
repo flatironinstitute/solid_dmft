@@ -355,7 +355,7 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
         # dyson equation to extract G0_freq, using Hermitian symmetry (always needed in solver postprocessing)
         solvers[ish].G0_freq << make_hermitian(make_gf_imfreq(G0_dlr, n_iw=general_params['n_iw']))
 
-        if ((solver_type_per_imp[ish] == 'cthyb' and solver_params[ish]['delta_interface'])
+        if ((solver_type_per_imp[ish] == 'cthyb' and solvers[ish].solver_params['delta_interface'])
                 or solver_type_per_imp[ish] == 'ctseg'):
             mpi.report('\n Using the delta interface for passing Delta(tau) and Hloc0 directly to the solver.\n')
 
@@ -391,7 +391,7 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
                 else:
                     solvers[ish].Delta_time[name] << Delta_tau
 
-                if solver_params[ish]['diag_delta']:
+                if solvers[ish].solver_params['diag_delta']:
                     for o1 in range(imp_eal[name].shape[0]):
                         for o2 in range(imp_eal[name].shape[0]):
                             if o1 != o2:
@@ -403,7 +403,7 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
                 for o1 in range(spin_block.shape[0]):
                     for o2 in range(spin_block.shape[1]):
                         # check if off-diag element is larger than threshold
-                        if o1 != o2 and abs(spin_block[o1, o2]) < solver_params[ish]['off_diag_threshold']:
+                        if o1 != o2 and abs(spin_block[o1, o2]) < solvers[ish].solver_params['off_diag_threshold']:
                             continue
                         else:
                             # TODO: adapt for SOC calculations, which should keep the imag part
@@ -444,7 +444,7 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
                     tail, err = gf.fit_hermitian_tail()
                     solvers[ish].Sigma_Hartree[block] = tail[0]
 
-            if solver_params[ish]['type'] in ('cthyb', 'ctseg') and solver_params[ish]['crm_dyson_solver']:
+            if solvers[ish].solver_params['type'] in ('cthyb', 'ctseg') and solvers[ish].solver_params['crm_dyson_solver']:
                 Sigma_dlr[ish] = make_gf_dlr(solvers[ish].Sigma_dlr)
             else:
                 Sigma_dlr_iw[ish] = sumk.block_structure.create_gf(ish=ish,

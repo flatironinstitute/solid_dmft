@@ -106,6 +106,20 @@ def _verify_input_params_solver(params: FullConfig) -> None:
             raise ValueError(
                 'Solver "cthyb" when using "crm_dyson_solver" must also measure the density matrix: "measure_density_matrix" = True'
             )
+        if entry['type'] == 'ctseg':
+            tail_op = [entry['crm_dyson_solver'],
+                       entry['legendre_fit'],
+                       entry['improved_estimator'],
+                       entry['perform_tail_fit']]
+            if sum(tail_op) > 1:
+                raise ValueError('Only one of the options "crm_dyson_solver", "legendre_fit", "improved_estimator", and "perform_tail_fit" can be set to True.')
+        if entry['type'] == 'cthyb':
+            tail_op = [entry['crm_dyson_solver'],
+                       entry['legendre_fit'],
+                       entry['measure_G_l'],
+                       entry['perform_tail_fit']]
+            if sum(tail_op) > 1:
+                raise ValueError('Only one of the options "crm_dyson_solver", "legendre_fit", "improved_estimator", and "perform_tail_fit" can be set to True.')
 
 
 def _verify_input_params_gw(params: FullConfig) -> None:

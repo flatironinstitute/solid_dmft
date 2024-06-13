@@ -669,7 +669,7 @@ def _dmft_step(sum_k, solvers, it, general_params,
             solvers[icrsh].G0_freq << make_hermitian(solvers[icrsh].G0_freq)
         sum_k.symm_deg_gf(solvers[icrsh].G0_freq, ish=icrsh)
 
-        if ((solver_type_per_imp[icrsh] == 'cthyb' and solver_params[icrsh]['delta_interface'])
+        if ((solver_type_per_imp[icrsh] == 'cthyb' and solvers[icrsh].solver_params['delta_interface'])
                 or solver_type_per_imp[icrsh] == 'ctseg'):
             mpi.report('\n Using the delta interface for passing Delta(tau) and Hloc0 directly to the solver.')
              # prepare solver input
@@ -689,7 +689,7 @@ def _dmft_step(sum_k, solvers, it, general_params,
                     solvers[icrsh].Delta_time[name] << make_gf_from_fourier(solvers[icrsh].Delta_freq[name],
                                                                            solvers[icrsh].Delta_time.mesh, tail)
 
-                if solver_params[icrsh]['diag_delta']:
+                if solvers[icrsh].solver_params['diag_delta']:
                     for o1 in range(g0.target_shape[0]):
                         for o2 in range(g0.target_shape[0]):
                             if o1 != o2:
@@ -701,7 +701,7 @@ def _dmft_step(sum_k, solvers, it, general_params,
                     for o1 in range(spin_block.shape[0]):
                         for o2 in range(spin_block.shape[1]):
                             # check if off-diag element is larger than threshold
-                            if o1 != o2 and abs(spin_block[o1,o2]) < solver_params[icrsh]['off_diag_threshold']:
+                            if o1 != o2 and abs(spin_block[o1,o2]) < solvers[icrsh].solver_params['off_diag_threshold']:
                                 continue
                             else:
                                 # TODO: adapt for SOC calculations, which should keep the imag part
@@ -718,7 +718,7 @@ def _dmft_step(sum_k, solvers, it, general_params,
         # store DMFT input directly in last_iter
         if mpi.is_master_node():
             archive['DMFT_results/last_iter']['G0_freq_{}'.format(icrsh)] = solvers[icrsh].G0_freq
-            if solver_type_per_imp[icrsh] == 'cthyb' and solver_params[icrsh]['delta_interface']:
+            if solver_type_per_imp[icrsh] == 'cthyb' and solvers[icrsh].solver_params['delta_interface']:
                 archive['DMFT_results/last_iter']['Delta_time_{}'.format(icrsh)] = solvers[icrsh].Delta_time
 
         # setup of measurement of chi(SzSz(tau) if requested

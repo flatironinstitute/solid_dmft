@@ -131,14 +131,14 @@ n_l = "<none>"
 n_tau_k = 10001
 n_warmup_cycles = "<no default>"
 off_diag_threshold = 0.0
-perform_tail_fit = true
+perform_tail_fit = false
 random_seed = "<none>"
 
 [[solver]]
 type = "hubbardI"
 idx_impurities = "<none>"
 legendre_fit = false
-measure_density_matrix = false
+measure_density_matrix = true
 measure_G_l = false
 measure_G_tau = true
 n_l = "<none>"
