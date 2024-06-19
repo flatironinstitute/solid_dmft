@@ -1384,6 +1384,8 @@ class SolverStructure:
         r'''
         Organize G_freq, G_time, Sigma_freq and G_l from ctseg solver
         '''
+        from triqs.operators.util.extractors import extract_U_dict2, dict_to_matrix
+        from solid_dmft.postprocessing.eval_U_cRPA_RESPACK import construct_Uijkl
 
         def set_Gs_from_G_l():
 
@@ -1423,6 +1425,43 @@ class SolverStructure:
             for iorb in range(norb):
                 self.orbital_occupations[block][iorb, iorb] = self.triqs_solver.results.densities[i]
 
+        self.orbital_occupations_sumk = self.sum_k.block_structure.convert_matrix(self.orbital_occupations, ish_from=self.icrsh, space_from='solver', space_to='sumk')
+        self.Sigma_Hartree = {}
+        self.Sigma_Hartree_sumk = {}
+        self.Sigma_moments = {}
+        if mpi.is_master_node():
+            # get density density U tensor from solver
+            U_dict = extract_U_dict2(self.h_int)
+            norb = get_n_orbitals(self.sum_k)[self.icrsh]['up']
+            U_dd = dict_to_matrix(U_dict, gf_struct=self.sum_k.gf_struct_solver_list[self.icrsh])
+            # extract Uijij and Uijji terms
+            Uijij = U_dd[0:norb, norb:2*norb]
+            Uijji = Uijij - U_dd[0:norb, 0:norb]
+            # and construct full Uijkl tensor
+            Uijkl = construct_Uijkl(Uijij, Uijji)
+
+            # now calculated Hartree shift via
+            # \Sigma^0_{\alpha \beta} = \sum_{i j} n_{i j} \left( 2 U_{\alpha i \beta j} - U_{\alpha i j \beta} \right)
+            for block, norb in self.sum_k.gf_struct_sumk[self.icrsh]:
+                self.Sigma_Hartree_sumk[block] = np.zeros((norb, norb),dtype=float)
+                for iorb, jorb in product(range(norb), repeat=2):
+                    for inner in range(norb):
+                        self.Sigma_Hartree_sumk[block][iorb,jorb] += self.orbital_occupations_sumk[block][inner, inner].real * ( 2*Uijkl[iorb, inner, jorb, inner].real - Uijkl[iorb, inner, inner, jorb].real )
+
+            # convert to solver block structure
+            self.Sigma_Hartree = self.sum_k.block_structure.convert_matrix(self.Sigma_Hartree_sumk, ish_from=self.icrsh, space_from='sumk', space_to='solver')
+
+            # use degenerate shell information to symmetrize
+            self.sum_k.symm_deg_gf(self.Sigma_Hartree, ish=self.icrsh)
+
+            # create moments array from this
+            for block, hf_val in self.Sigma_Hartree.items():
+                self.Sigma_moments[block] = np.array([hf_val])
+
+        self.Sigma_Hartree = mpi.bcast(self.Sigma_Hartree)
+        self.Sigma_moments = mpi.bcast(self.Sigma_moments)
+        self.Sigma_Hartree_sumk = mpi.bcast(self.Sigma_Hartree_sumk)
+
         if mpi.is_master_node():
             # create empty moment container (list of np.arrays)
             Gf_known_moments = make_zero_tail(self.G_freq,n_moments=2)
@@ -1450,10 +1489,8 @@ class SolverStructure:
                                                 fit_max_n=self.solver_params['fit_max_n'],
                                                 fit_min_w=self.solver_params['fit_min_w'],
                                                 fit_max_w=self.solver_params['fit_max_w'],
-                                                fit_max_moment=self.solver_params['fit_max_moment'],)
-            self.Sigma_Hartree = {}
-            for block in tail.keys():
-                self.Sigma_Hartree[block] = tail[block][0]
+                                                fit_max_moment=self.solver_params['fit_max_moment'],
+                                                fit_known_moments=self.Sigma_moments)
 
             # recompute G_freq from Sigma with fitted tail
             self.G_freq = inverse(inverse(self.G0_freq) - self.Sigma_freq)
@@ -1482,7 +1519,6 @@ class SolverStructure:
             from triqs.gf.dlr_crm_dyson_solver import minimize_dyson
 
             mpi.report('\nCRM Dyson solver to extract Σ impurity\n')
-            self.Sigma_Hartree = {}
             # fit QMC G_tau to DLR
             if mpi.is_master_node():
                 if self.solver_params['crm_dlr_wmax'] is not None:
@@ -1515,44 +1551,32 @@ class SolverStructure:
                 # minimize dyson for the first entry of each deg shell
                 self.Sigma_dlr = self.sum_k.block_structure.create_gf(ish=self.icrsh, gf_function=Gf, mesh=mesh_dlr_iw, space='solver')
                 # without any degenerate shells we run the minimization for all blocks
-                _, tail = _fit_tail_window(Sigma_iw,
-                                        fit_min_n=self.solver_params['fit_min_n'],
-                                        fit_max_n=self.solver_params['fit_max_n'],
-                                        fit_min_w=self.solver_params['fit_min_w'],
-                                        fit_max_w=self.solver_params['fit_max_w'],
-                                        fit_max_moment=self.solver_params['fit_max_moment'],)
                 if self.sum_k.deg_shells[self.icrsh] == []:
                     for block, gf in self.Sigma_dlr:
-                        # tail, err = Sigma_iw[block].fit_hermitian_tail()
-                        self.Sigma_Hartree[block] = tail[block][0]
                         np.random.seed(85281)
                         print('Minimizing Dyson via CRM for Σ[block]:', block)
                         gf, _, _ = minimize_dyson(G0_dlr=G0_dlr_iw[block],
                                                   G_dlr=G_dlr[block],
-                                                  Sigma_moments=tail[block][0:1]
+                                                  Sigma_moments=self.Sigma_moments[block]
                                                   )
                 else:
                     for deg_shell in self.sum_k.deg_shells[self.icrsh]:
                         for i, block in enumerate(deg_shell):
                             if i == 0:
-                                # tail, err = Sigma_iw[block].fit_hermitian_tail()
-                                self.Sigma_Hartree[block] = tail[block][0]
                                 np.random.seed(85281)
                                 print('Minimizing Dyson via CRM for Σ[block]:', block)
                                 self.Sigma_dlr[block], _, _ = minimize_dyson(G0_dlr=G0_dlr_iw[block],
                                                                     G_dlr=G_dlr[block],
-                                                                    Sigma_moments=tail[block][0:1]
+                                                                    Sigma_moments=self.Sigma_moments[block]
                                                                     )
                                 sol_block = block
                             else:
                                 print(f'Copying result from first block of deg list to {block}')
                                 self.Sigma_dlr[block] << self.Sigma_dlr[sol_block]
-                                self.Sigma_Hartree[block] = tail[block][0]
 
                             self.Sigma_freq[block] = make_gf_imfreq(self.Sigma_dlr[block], n_iw=self.general_params['n_iw'])
-                            self.Sigma_freq[block] += tail[block][0]
+                            self.Sigma_freq[block] += self.Sigma_moments[block][0]
 
-                # recompute G_freq from Sigma with fitted tail
                 self.G_freq = inverse(inverse(self.G0_freq) - self.Sigma_freq)
                 print('\n')
 
@@ -1560,7 +1584,6 @@ class SolverStructure:
             mpi.barrier()
             self.Sigma_freq = mpi.bcast(self.Sigma_freq)
             self.Sigma_dlr = mpi.bcast(self.Sigma_dlr)
-            self.Sigma_Hartree = mpi.bcast(self.Sigma_Hartree)
             self.G_time_dlr = mpi.bcast(self.G_time_dlr)
             self.G_freq = mpi.bcast(self.G_freq)
         else:

@@ -30,8 +30,5 @@ diag_delta = false
 crm_dyson_solver = true
 crm_dlr_wmax = 0.2
 crm_dlr_eps = 1e-6
-fit_min_n = 10
-fit_max_n = 100
-fit_max_moment = 4
 
 measure_nnt = true
