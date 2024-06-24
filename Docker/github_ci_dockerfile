@@ -1,4 +1,4 @@
-FROM ubuntu:22.04 AS base
+FROM ubuntu:24.04 AS base
 
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
       build-essential \
@@ -8,8 +8,8 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
       cython3 \
       debhelper \
       dh-python \
-      g++-12 \
-      gfortran-12 \
+      g++-13 \
+      gfortran-13 \
       git \
       hdf5-tools \
       libboost-dev \
@@ -17,7 +17,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
       libgfortran5 \
       libgmp-dev \
       libhdf5-dev \
-      liblapack-dev \
+      libopenblas-dev \
       libnfft3-dev \
       libomp-dev \
       libopenmpi-dev \
@@ -33,6 +33,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
       python3-dev \
       python3-jinja2 \
       python3-mako \
+      python3-mesonpy \
       python3-matplotlib \
       python3-monty \
       python3-mpi4py \
@@ -48,6 +49,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
       python3-sphinx \
       python3-sphinx-rtd-theme \
       python3-tomli \
+      python3-linkify-it \
       python3-venv \
       rsync \
       sudo \
@@ -55,23 +57,6 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
       apt-get autoremove --purge -y && \
       apt-get autoclean -y && \
       rm -rf /var/cache/apt/* /var/lib/apt/lists/*
-
-# linkify-it-py (required by sphinx doc build) is not available in Ubuntu 22.04 as package
-# the following manually installs it and its only dependency uc-micro-py
-RUN mkdir -p /src && cd /src \
- && curl -LOOO http://archive.ubuntu.com/ubuntu/pool/universe/u/uc-micro-py/uc-micro-py_1.0.1{-3.dsc,.orig.tar.xz,-3.debian.tar.xz} \
- && dpkg-source -x uc-micro-py_1.0.1-3.dsc \
- && cd uc-micro-py-1.0.1 \
- && DEB_BUILD_OPTIONS=nocheck dpkg-buildpackage -b -d -uc -us \
- && cd - \
- && apt-get install ./python3-uc-micro_1.0.1-3_all.deb \
- && curl -LOOO http://archive.ubuntu.com/ubuntu/pool/universe/l/linkify-it-py/linkify-it-py_2.0.0{-1.dsc,.orig.tar.gz,-1.debian.tar.xz} \
- && dpkg-source -x linkify-it-py_2.0.0-1.dsc \
- && cd linkify-it-py-2.0.0/ \
- && DEB_BUILD_OPTIONS=nocheck dpkg-buildpackage -b -d -uc -us \
- && cd - \
- && apt-get install ./python3-linkify-it_2.0.0-1_all.deb \
- && cd / && rm -rf /src
 
 # the above is cached by the github action workflow
 FROM base AS pkgs
@@ -86,14 +71,14 @@ ARG NCORES=8
 # create source dirs
 RUN cd / && mkdir -p triqs && mkdir -p source
 
-ENV PYTHON_VERSION=3.10 \
-    CC=gcc-12 CXX=g++-12
+ENV PYTHON_VERSION=3.12 \
+    CC=gcc-13 CXX=g++-13
 # triqs
 ENV CPATH=/triqs/include:${CPATH} \
     PATH=/triqs/bin:${PATH} \
     LIBRARY_PATH=/triqs/lib:${LIBRARY_PATH} \
     LD_LIBRARY_PATH=/triqs/lib:${LD_LIBRARY_PATH} \
-    PYTHONPATH=/triqs/lib/python3.10/site-packages:${PYTHONPATH} \
+    PYTHONPATH=/triqs/lib/python3.12/site-packages:${PYTHONPATH} \
     CMAKE_PREFIX_PATH=/triqs/share/cmake:${CMAKE_PREFIX_PATH} \
     CMAKE_BUILD_PARALLEL_LEVEL=${NCORES} \
     CTEST_OUTPUT_ON_FAILURE=1 \
@@ -136,7 +121,7 @@ RUN cd /source && git clone -b unstable --depth 1 https://github.com/TRIQS/maxen
     && make -j$NCORES && ctest -j$NCORES && make install
 
 # install sparse-ir into triqs pythonpath
-RUN pip install --no-deps --target /triqs/lib/python3.10/site-packages sparse-ir[xprec]
+RUN pip install --no-deps --target /triqs/lib/python3.12/site-packages sparse-ir xprec
 
 # remove source
 RUN cd / && rm -rf source
