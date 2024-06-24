@@ -44,7 +44,7 @@ jobs:
           images: ghcr.io/${{ github.repository }}_${{ matrix.name }}
 
       - name: Build and cache base Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./Docker
           file: ./Docker/${{ matrix.name }}_dockerfile
@@ -57,7 +57,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ github.ref_name }}-${{ matrix.name }}
 
       - name: Build and push final Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./Docker
           file: ./Docker/${{ matrix.name }}_dockerfile
