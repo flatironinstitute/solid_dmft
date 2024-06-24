@@ -136,7 +136,7 @@ RUN cd /source && git clone -b unstable --depth 1 https://github.com/TRIQS/maxen
     && make -j$NCORES && ctest -j$NCORES && make install
 
 # install sparse-ir into triqs pythonpath
-RUN pip install --target /triqs/lib/python3.10/site-packages sparse-ir[xprec]
+RUN pip install --no-deps --target /triqs/lib/python3.10/site-packages sparse-ir[xprec]
 
 # remove source
 RUN cd / && rm -rf source
