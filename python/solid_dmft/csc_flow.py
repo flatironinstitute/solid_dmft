@@ -227,7 +227,7 @@ def _full_vasp_run(general_params, dft_params, initial_run, n_iter_dft=1, sum_k=
 
 
 # Main CSC flow method
-def csc_flow_control(general_params, solver_params, dft_params, advanced_params):
+def csc_flow_control(general_params, solver_params, dft_params, gw_params, advanced_params):
     """
     Function to run the csc cycle. It writes and removes the vasp.lock file to
     start and stop Vasp, run the converter, run the dmft cycle and abort the job
@@ -241,6 +241,8 @@ def csc_flow_control(general_params, solver_params, dft_params, advanced_params)
         solver parameters as a dict
     dft_params : dict
         dft parameters as a dict
+    gw_params : dict
+        gw parameters as a dict
     advanced_params : dict
         advanced parameters as a dict
     """
@@ -321,8 +323,8 @@ def csc_flow_control(general_params, solver_params, dft_params, advanced_params)
 
         ############################################################
         # run the dmft_cycle
-        is_converged, sum_k = dmft_cycle(general_params, solver_params, advanced_params,
-                                         dft_params, iter_one_shot, irred_indices, dft_energy)
+        is_converged, sum_k = dmft_cycle(general_params, solver_params, advanced_params, dft_params,
+                                         gw_params, iter_one_shot, irred_indices, dft_energy)
         ############################################################
 
         iter_dmft += iter_one_shot

@@ -568,8 +568,8 @@ def dmft_cycle(general_params, solver_params, advanced_params, dft_params,
         mpi.report('#'*80)
         mpi.report('Running iteration: {} / {}'.format(it, iteration_offset + n_iter))
         (sum_k, solvers,
-         observables, is_converged) = _dmft_step(sum_k, solvers, it, general_params,
-                                                 solver_params, advanced_params, dft_params, map_imp_solver, solver_type_per_imp,
+         observables, is_converged) = _dmft_step(sum_k, solvers, it, general_params, solver_params, gw_params,
+                                                 advanced_params, dft_params, map_imp_solver, solver_type_per_imp,
                                                  h_int, archive, shell_multiplicity, E_kin_dft,
                                                  observables, conv_obs, ops_chi_measure, dft_irred_kpt_indices, dft_energy, broadening,
                                                  is_converged, is_sampling=False)
@@ -592,8 +592,8 @@ def dmft_cycle(general_params, solver_params, advanced_params, dft_params,
                         iteration_offset + 1 + general_params['sampling_iterations']):
             mpi.report('#'*80)
             mpi.report('Running iteration: {} / {}'.format(it, iteration_offset+general_params['sampling_iterations']))
-            sum_k, solvers, observables, _ = _dmft_step(sum_k, solvers, it, general_params,
-                                                        solver_params, advanced_params, dft_params, map_imp_solver, solver_type_per_imp,
+            sum_k, solvers, observables, _ = _dmft_step(sum_k, solvers, it, general_params, solver_params, gw_params,
+                                                        advanced_params, dft_params, map_imp_solver, solver_type_per_imp,
                                                         h_int, archive, shell_multiplicity, E_kin_dft,
                                                         observables, conv_obs, ops_chi_measure, dft_irred_kpt_indices, dft_energy, broadening,
                                                         is_converged=True, is_sampling=True)
@@ -610,10 +610,10 @@ def dmft_cycle(general_params, solver_params, advanced_params, dft_params,
     return is_converged, sum_k
 
 
-def _dmft_step(sum_k, solvers, it, general_params,
-               solver_params, advanced_params, dft_params, map_imp_solver, solver_type_per_imp,
-               h_int, archive, shell_multiplicity, E_kin_dft,
-               observables, conv_obs, ops_chi_measure, dft_irred_kpt_indices, dft_energy, broadening,
+def _dmft_step(sum_k, solvers, it, general_params, solver_params, gw_params,
+               advanced_params, dft_params, map_imp_solver, solver_type_per_imp, h_int,
+               archive, shell_multiplicity, E_kin_dft, observables, conv_obs,
+               ops_chi_measure, dft_irred_kpt_indices, dft_energy, broadening,
                is_converged, is_sampling):
     """
     Contains the actual dmft steps when all the preparation is done
@@ -774,8 +774,8 @@ def _dmft_step(sum_k, solvers, it, general_params,
     # calculate new DC
     # for the hartree solver the DC potential will be formally set to zero as it is already present in the Sigma
     if general_params['dc'] and general_params['dc_dmft']:
-        sum_k = initial_sigma.calculate_double_counting(sum_k, density_mat,
-                                                        general_params, advanced_params,
+        sum_k = initial_sigma.calculate_double_counting(sum_k, density_mat, general_params,
+                                                        gw_params, advanced_params,
                                                         solver_type_per_imp)
 
     #The hartree solver computes the DC energy internally, set it in sum_k

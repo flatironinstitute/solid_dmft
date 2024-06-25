@@ -92,7 +92,7 @@ def run_dmft(params, config_file_name=None):
     if general_params['csc']:
         # Start CSC calculation, always in same folder as dmft_config
         general_params['jobname'] = '.'
-        csc_flow_control(general_params, solver_params, dft_params, advanced_params)
+        csc_flow_control(general_params, solver_params, dft_params, gw_params, advanced_params)
     elif general_params['gw_embedding']:
         from solid_dmft.gw_embedding.gw_flow import embedding_driver
         if mpi.is_master_node():

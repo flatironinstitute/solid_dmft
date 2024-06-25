@@ -162,7 +162,9 @@ def write(archive, sum_k, general_params, solver_params, solvers, map_imp_solver
                 if dft_var in archive:
                     archive['DMFT_results/it_{}'.format(it)].create_group(dft_var)
                     for key, value in archive[dft_var].items():
-                        archive['DMFT_results/it_{}'.format(it)][dft_var][key] = value
+                        # do only store changing elements
+                        if key not in ['symm_kpath', 'kpts_cart']:
+                            archive['DMFT_results/it_{}'.format(it)][dft_var][key] = value
             for band_elem in ['_bands.dat', '_bands.dat.gnu', '_bands.projwfc_up', '_band.dat']:
                 if os.path.isfile('./{}{}'.format(general_params['seedname'], band_elem)):
                     os.rename('./{}{}'.format(general_params['seedname'], band_elem),
