@@ -344,10 +344,10 @@ def dmft_cycle(general_params, solver_params, advanced_params, dft_params,
 
     # Checks the general parameters that are impurity-dependent and ensures they are a list
     mpi.report('Checking parameters that are impurity-dependent')
-    for key in ['U', 'J', 'U_prime', 'ratio_F4_F2', 'h_int_type', 'enforce_off_diag', 'dc_type']:
+    for key in ['U', 'J', 'U_prime', 'ratio_F4_F2', 'h_int_type', 'enforce_off_diag', 'dc_type', 'kanamori_spin_flip', 'kanamori_pair_hopping']:
         general_params = _extract_quantity_per_inequiv(key, sum_k.n_inequiv_shells, general_params)
     # Same for advanced params
-    for key in ['dc_U', 'dc_J', 'dc_fixed_occ', 'map_solver_struct', 'pick_solver_struct', 'mapped_solver_struct_degeneracies']:
+    for key in ['dc_U', 'dc_J', 'dc_fixed_occ','map_solver_struct', 'pick_solver_struct', 'mapped_solver_struct_degeneracies']:
         advanced_params = _extract_quantity_per_inequiv(key, sum_k.n_inequiv_shells, advanced_params)
 
     # Checks that all impurities have an associated solver

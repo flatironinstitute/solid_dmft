@@ -224,6 +224,8 @@ def _construct_kanamori(sum_k, general_params, solver_type_per_imp, icrsh, den_d
             h_int = util.h_int_kanamori(sum_k.spin_block_names[sum_k.SO], n_orb,
                                         map_operator_structure=sum_k.sumk_to_solver[icrsh],
                                         U=Umat, Uprime=Upmat, J_hund=general_params['J'][icrsh],
+                                        spin_flip=general_params['kanamori_spin_flip'][icrsh],
+                                        pair_hopping=general_params['kanamori_pair_hopping'][icrsh],
                                         H_dump=os.path.join(general_params['jobname'], f'H_imp{icrsh}.txt'))
     else:
         h_int = _construct_kanamori_soc(general_params['U'][icrsh], general_params['J'][icrsh],

@@ -105,6 +105,10 @@ J :  float or list of float, mandatory
         otherwise as a list a different J can be specified per impurity.
 jobname : str, default = 'dmft_dir'
         the output directory for one-shot calculations
+kanamori_spin_flip : bool, default = True
+        include spin-flip terms in the Kanamori interaction
+kanamori_pair_hopping : bool, default = True
+        include pair-hopping terms in the Kanamori interaction
 load_sigma : bool, default = False
         load a old sigma from h5 file
 load_sigma_iter : int, default = -1
