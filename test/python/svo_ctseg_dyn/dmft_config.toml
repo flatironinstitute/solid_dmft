@@ -33,7 +33,7 @@ off_diag_threshold = 1e-4
 crm_dyson_solver = true
 crm_dlr_wmax = 2
 crm_dlr_eps = 1e-6
-n_tau_k = 10001
+n_tau_bosonic = 10001
 
 [gw]
 code = "aimbes"
