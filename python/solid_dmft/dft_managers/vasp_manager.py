@@ -37,6 +37,7 @@ import time
 import numpy as np
 
 import triqs.utility.mpi as mpi
+from h5 import HDFArchive
 
 from solid_dmft.dft_managers import mpi_helpers
 
@@ -171,14 +172,18 @@ def run_charge_update():
 
 def read_dft_energy():
     """
-    Reads DFT energy from the last line of Vasp's OSZICAR.
+    Reads DFT energy from the last line of Vasp's vasptriqs.h5 or from OSZICAR.
     """
-    with open('OSZICAR', 'r') as file:
-        nextline = file.readline()
-        while nextline.strip():
-            line = nextline
+    if os.path.isfile('vasptriqs.h5'):
+        with HDFArchive('vasptriqs.h5', 'r') as h5:
+            dft_energy = h5['triqs/etotal']
+    else:
+        with open('OSZICAR', 'r') as file:
             nextline = file.readline()
-    dft_energy = float(line.split()[2])
+            while nextline.strip():
+                line = nextline
+                nextline = file.readline()
+        dft_energy = float(line.split()[2])
 
     return dft_energy
 
