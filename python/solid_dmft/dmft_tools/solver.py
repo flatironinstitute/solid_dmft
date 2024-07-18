@@ -702,48 +702,29 @@ class SolverStructure:
             if self.general_params['h_int_type'][self.icrsh] == 'dyn_density_density':
                 mpi.report('add dynamic interaction from AIMBES')
                 # convert 4 idx tensor to two index tensor
-                ish = self.sum_k.inequiv_to_corr[self.icrsh]
-                # prepare dynamic 2 idx parts
                 Uloc_dlr = self.gw_params['Uloc_dlr'][self.icrsh]['up']
-                Uloc_dlr_2idx = Gf(mesh=Uloc_dlr.mesh, target_shape=[Uloc_dlr.target_shape[0],Uloc_dlr.target_shape[1]])
                 Uloc_dlr_2idx_prime = Gf(mesh=Uloc_dlr.mesh, target_shape=[Uloc_dlr.target_shape[0],Uloc_dlr.target_shape[1]])
 
                 for coeff in Uloc_dlr.mesh:
-                    # Transposes rotation matrix here because TRIQS has a slightly different definition
-                    if self.sum_k.use_rotations:
-                        Uloc_dlr_idx = util.transform_U_matrix(Uloc_dlr[coeff], self.sum_k.rot_mat[ish].T)
-                    else:
-                        Uloc_dlr_idx = Uloc_dlr[coeff]
-                    U, Uprime = reduce_4index_to_2index(Uloc_dlr_idx)
-                    # apply rot mat here
-                    Uloc_dlr_2idx[coeff] = U
+                    Uloc_dlr_idx = Uloc_dlr[coeff]
+                    _, Uprime = reduce_4index_to_2index(Uloc_dlr_idx)
                     Uloc_dlr_2idx_prime[coeff] = Uprime
 
                 # create full frequency objects
-                Uloc_tau_2idx = make_gf_imtime(Uloc_dlr_2idx, n_tau=self.solver_params['n_tau_bosonic'])
                 Uloc_tau_2idx_prime = make_gf_imtime(Uloc_dlr_2idx_prime, n_tau=self.solver_params['n_tau_bosonic'])
 
-                Uloc_tau_2idx_sumk = BlockGf(name_list=['up', 'down'], block_list=[Uloc_tau_2idx, Uloc_tau_2idx])
                 Uloc_tau_2idx_prime_sumk = BlockGf(name_list=['up', 'down'], block_list=[Uloc_tau_2idx_prime, Uloc_tau_2idx_prime])
-                Uloc_tau_2idx_solver = self.sum_k.block_structure.convert_gf(Uloc_tau_2idx_sumk,
-                                                                             ish_from=self.icrsh,
-                                                                             space_from='sumk',
-                                                                             space_to='solver')
                 Uloc_tau_2idx_prime_solver = self.sum_k.block_structure.convert_gf(Uloc_tau_2idx_prime_sumk,
                                                                                    ish_from=self.icrsh,
                                                                                    space_from='sumk',
                                                                                    space_to='solver')
 
-
-                # fill D0_tau from Uloc_tau_2idx and Uloc_tau_2idx_prime
-                for iblock, Uloc_i in Uloc_tau_2idx_solver:
-                    for jblock, Uloc_j in Uloc_tau_2idx_solver:
-                        # same spin interaction
-                        if iblock == jblock:
-                            self.triqs_solver.D0_tau[iblock, jblock] << Uloc_tau_2idx_solver[iblock]
-                        # opposite spin interaction
-                        else:
-                            self.triqs_solver.D0_tau[iblock, jblock] << Uloc_tau_2idx_prime_solver[iblock]
+                # fill D0_tau from Uloc_tau_2idx_prime
+                for iblock, Uloc_i in Uloc_tau_2idx_prime_solver:
+                    for jblock, Uloc_j in Uloc_tau_2idx_prime_solver:
+                        # same spin and opposite spin interaction have same interaction for dynamic part
+                        # Hund's rule does not apply here
+                        self.triqs_solver.D0_tau[iblock, jblock] << Uloc_tau_2idx_prime_solver[iblock]
 
                 # TODO: add Jerp_Iw to the solver
 
@@ -761,7 +742,6 @@ class SolverStructure:
                     archive['DMFT_input/solver/it_-1'][f'triqs_solver_params_{self.icrsh}'] = prep_params_for_h5(self.triqs_solver_params)
                     archive['DMFT_input/solver/it_-1']['mpi_size'] = mpi.size
                     if self.general_params['h_int_type'][self.icrsh] == 'dyn_density_density':
-                        archive['DMFT_input/solver/it_-1'][f'Uloc_dlr_2idx_{self.icrsh}'] = Uloc_dlr_2idx
                         archive['DMFT_input/solver/it_-1'][f'Uloc_dlr_2idx_prime_{self.icrsh}'] = Uloc_dlr_2idx_prime
             mpi.barrier()
 
