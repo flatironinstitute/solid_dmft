@@ -94,7 +94,11 @@ def _read_h5(external_path, iteration):
         else:
             # Old name for chemical_potential_post
             chemical_potential = archive[h5_internal_path]['chemical_potential']
-        chemical_potential_zero = archive['DMFT_results/observables']['mu'][0]
+        if 'observables' in archive['DMFT_results']:
+            chemical_potential_zero = archive['DMFT_results/observables']['mu'][0]
+        else:
+            chemical_potential_zero = None
+            print('WARNING: DFT chemical potential could not be read sigma_inf continuator_type not available')
 
     return sigma_iw, dc_potential, chemical_potential, chemical_potential_zero
 
@@ -133,6 +137,8 @@ def _create_sigma_continuator(sigma_iw, dc_potential, chemical_potential, chemic
         continuators = [InversionSigmaContinuator(sigma_imp, shift)
                         for sigma_imp, shift in zip(sigma_iw, shifts)]
     elif continuator_type == 'inversion_sigmainf':
+        if chemical_potential_zero is None:
+            raise ValueError('DFT chemical_potential not specified. Check input')
         shifts = [{key: sigma_block.data[-1].real + (chemical_potential - chemical_potential_zero)
                    for key, sigma_block in sigma_imp} for sigma_imp in sigma_iw]
         continuators = [InversionSigmaContinuator(sigma_imp, shift)
@@ -251,8 +257,8 @@ def _write_sigma_omega_to_h5(g_aux_w, sigma_w, external_path, iteration):
             archive[h5_internal_path][f'G_aux_for_Sigma_maxent_{i}'] = g_aux_imp
 
 
-def main(external_path, iteration=None, continuator_type='inversion_sigmainf', maxent_error=.02,
-         omega_min=-12., omega_max=12., n_points_maxent=400, n_points_alpha=50,
+def main(external_path, iteration=None, continuator_type='inversion_sigmainf', mu_zero = None,
+         maxent_error=.02, omega_min=-12., omega_max=12., n_points_maxent=400, n_points_alpha=50,
          analyzer='LineFitAnalyzer', n_points_interp=2000, n_points_final=1000):
     """
     Main function that reads the Matsubara self-energy from h5, analytically continues it,
@@ -270,6 +276,8 @@ def main(external_path, iteration=None, continuator_type='inversion_sigmainf', m
         Type of continuator to use, one of 'inversion_sigmainf', 'inversion_dc', 'direct'
     maxent_error : float
         The error that is used for the analyzers.
+    mu_zero : float, default=None
+        chemical potential at the single particle level, if not given read from h5 archive
     omega_min : float
         Lower end of range where Sigma is being continued. Range has to comprise
         all features of the self-energy because the real part of it comes from
@@ -325,6 +333,9 @@ def main(external_path, iteration=None, continuator_type='inversion_sigmainf', m
     continuators = None
     if mpi.is_master_node():
         sigma_iw, dc_potential, chemical_potential, chemical_potential_zero = _read_h5(external_path, iteration)
+        # overwrite mu if given
+        if mu_zero is not None:
+            chemical_potential_zero = mu_zero
         mpi.report('Finished reading h5 archive. Found {} impurities.'.format(len(sigma_iw)))
         continuators = _create_sigma_continuator(sigma_iw, dc_potential,
                                                  chemical_potential, chemical_potential_zero, continuator_type)
