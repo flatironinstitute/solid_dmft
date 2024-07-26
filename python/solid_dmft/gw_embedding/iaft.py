@@ -15,7 +15,7 @@ class IAFT(object):
 
     Dependency:
         sparse-ir with xprec supports (https://sparse-ir.readthedocs.io/en/latest/)
-        To install sparse-ir with xprec supports: "pip install sparse-ir[xprex]".
+        To install sparse-ir with xprec supports: "pip install sparse-ir[xprec]".
 
     Attributes:
     beta: float
@@ -45,7 +45,7 @@ class IAFT(object):
     nw_b: int
         Number of bosonic frequency sampling points
     """
-    def __init__(self, beta: float, lmbda: float, prec: float = 1e-15):
+    def __init__(self, beta: float, lmbda: float, prec: float = 1e-15, verbal: bool = True):
         """
         :param beta: float
             Inverse temperature (a.u.)
@@ -84,20 +84,19 @@ class IAFT(object):
         self.Ttw_bb = np.dot(Ttl_bb, self.Tlw_bb)
         self.Twt_bb = np.dot(Twl_bb, self.Tlt_bb)
 
-        print(self)
-        sys.stdout.flush()
+        if verbal:
+            print(self)
+            sys.stdout.flush()
 
     def __str__(self):
-        return "*******************************\n" \
-               "Imaginary-Axis Fourier Transform based on IR basis and sparse-sampling:\n" \
-               "*******************************\n" \
-               "    - precision = {}\n" \
-               "    - beta = {}\n" \
-               "    - lambda = {}\n" \
-               "    - nt_f, nw_f = {}, {}\n" \
-               "    - nt_b, nw_b = {}, {}\n" \
-               "*******************************\n".format(self.prec, self.beta, self.lmbda, self.nt_f, self.nw_f,
-                                                        self.nt_b, self.nw_b)
+        return ("Mesh details on the imaginary axis\n" \
+                "----------------------------------\n" \
+                "precision = {}\n" \
+                "beta = {}\n" \
+                "lambda = {}\n" \
+                "nt_f, nw_f = {}, {}\n" \
+                "nt_b, nw_b = {}, {}\n".format(self.prec, self.beta, self.lmbda, self.nt_f, self.nw_f,
+                                                self.nt_b, self.nw_b))
 
     def wn_mesh(self, stats: str, ir_notation: bool = True):
         """
@@ -146,6 +145,41 @@ class IAFT(object):
         Ow = Ow.reshape((Twt.shape[0],) + Ot_shape[1:])
         return Ow
 
+    def tau_to_w_phsym(self, Ot, stats: str):
+        """
+        Fourier transform from imaginary-time axis to Matsubara-frequency axis w/ particle-hole symmetry
+        :param Ot: numpy.ndarray
+            imaginary-time object with dimensions (nts, ...)
+        :param stats: str
+            statistics: 'f' for fermions and 'b' for bosons
+
+        :return: numpy.ndarray
+            Matsubara-frequency object with dimensions (nw, ...)
+        """
+        if stats != 'b':
+            raise ValueError("FT w/ particle-hole symmetry only support bosonic correlation functions")
+
+        nw_half = self.nw_b // 2 if self.nw_b % 2 == 0 else self.nw_b // 2 + 1
+        nt_half = self.nt_b // 2 if self.nt_b % 2 == 0 else self.nt_b // 2 + 1
+        if Ot.shape[0] != nt_half:
+            raise ValueError(
+                "tau_to_w_phsym: Number of tau points are inconsistent: {} and {}".format(Ot.shape[0], nt_half))
+
+        Twt_pos = np.zeros((nw_half, nt_half), dtype=self.Twt_bb.dtype)
+        for n in range(nw_half):
+            iw = self.nw_b // 2 + n
+            for it in range(nt_half):
+                imt = self.nt_b - it - 1
+                Twt_pos[n, it] = self.Twt_bb[iw, it] if it == imt else self.Twt_bb[iw, it] + self.Twt_bb[iw, imt]
+
+        Ot_shape = Ot.shape
+        Ot = Ot.reshape(Ot.shape[0], -1)
+        Ow = np.dot(Twt_pos, Ot)
+
+        Ot = Ot.reshape(Ot_shape)
+        Ow = Ow.reshape((Twt_pos.shape[0],) + Ot_shape[1:])
+        return Ow
+
     def w_to_tau(self, Ow, stats):
         """
         Fourier transform from Matsubara-frequency axis to imaginary-time axis.
@@ -173,6 +207,43 @@ class IAFT(object):
         Ow = Ow.reshape(Ow_shape)
         Ot = Ot.reshape((Ttw.shape[0],) + Ow_shape[1:])
         return Ot
+
+    def w_to_tau_phsym(self, Ow, stats):
+        """
+        Fourier transform from Matsubara-frequency axis to imaginary-time axis w/ particle-hole symmetry.
+
+        :param Ow: numpy.ndarray
+            Matsubara-frequency object with dimensions (nw, ...)
+        :param stats: str
+            statistics, 'f' for fermions and 'b' for bosons
+
+        :return: numpy.ndarray
+            Imaginary-time object with dimensions (nt, ...)
+        """
+        if stats != 'b':
+            raise ValueError("FT w/ particle-hole symmetry only support bosonic correlation functions")
+
+        nw_half = self.nw_b // 2 if self.nw_b % 2 == 0 else self.nw_b // 2 + 1
+        nt_half = self.nt_b // 2 if self.nt_b % 2 == 0 else self.nt_b // 2 + 1
+        if Ow.shape[0] != nw_half:
+            raise ValueError(
+                "w_to_tau_phsym: Number of w points are inconsistent: {} and {}".format(Ow.shape[0], nw_half))
+
+        Ttw_pos = np.zeros((nt_half, nw_half), dtype=self.Ttw_bb.dtype)
+        for it in range(nt_half):
+            for n in range(nw_half):
+                iw = self.nw_b // 2 + n
+                imw = self.nw_b // 2 - n
+                Ttw_pos[it, n] = self.Ttw_bb[it, iw] if iw == imw else self.Ttw_bb[it, iw] + self.Ttw_bb[it, imw]
+
+        Ow_shape = Ow.shape
+        Ow = Ow.reshape(Ow.shape[0], -1)
+        Ot = np.dot(Ttw_pos, Ow)
+
+        Ow = Ow.reshape(Ow_shape)
+        Ot = Ot.reshape((Ttw_pos.shape[0],) + Ow_shape[1:])
+        return Ot
+
 
     def w_interpolate(self, Ow, wn_mesh_interp, stats: str, ir_notation: bool = True):
         """
@@ -215,6 +286,56 @@ class IAFT(object):
         Ow_interp = Ow_interp.reshape((wn_indices.shape[0],) + Ow_shape[1:])
         return Ow_interp
 
+    def w_interpolate_phsym(self, Ow, wn_mesh_interp, stats: str, ir_notation: bool = True):
+        """
+        Interpolate a dynamic object to arbitrary points on the Matsubara axis.
+
+        :param Ow: numpy.ndarray
+            Dynamic object on the Matsubara sampling points, self.wn_mesh.
+        :param wn_mesh_interp: numpy.ndarray(dim=1, dtype=int)
+            Target frequencies "INDICES".
+            The physical Matsubara frequencies are wn_mesh_interp * pi/beta.
+        :param stats: str
+            Statistics, 'f' for fermions and 'b' for bosons.
+        :param ir_notation: bool
+            Whether wn_mesh_interp is in sparse_ir notation where iwn = n*pi/beta for both fermions and bosons.
+            Otherwise, iwn = (2n+1)*pi/beta  for fermions and 2n*pi/beta for bosons.
+
+        :return: numpy.ndarray
+            Matsubara-frequency object with dimensions (nw_interp, ...)
+        """
+        if stats != 'b':
+            raise ValueError("FT w/ particle-hole symmetry only support bosonic correlation functions")
+
+        nw_half = self.nw_b // 2 if self.nw_b % 2 == 0 else self.nw_b // 2 + 1
+        nt_half = self.nt_b // 2 if self.nt_b % 2 == 0 else self.nt_b // 2 + 1
+        if Ow.shape[0] != nw_half:
+            raise ValueError(
+                "w_interpolate_phsym: Number of w points are inconsistent: {} and {}".format(Ow.shape[0], nw_half))
+
+        if ir_notation:
+            wn_indices = np.asarray(wn_mesh_interp)
+        else:
+            wn_indices = np.array([2*n for n in wn_mesh_interp], dtype=int)
+        Tlw = self.Tlw_bb
+        Tlw_pos = np.zeros((Tlw.shape[0], nw_half), dtype=Tlw.dtype)
+        for l in range(Tlw.shape[0]):
+            for n in range(nw_half):
+                iw = self.nw_b // 2 + n
+                imw = self.nw_b // 2 - n
+                Tlw_pos[l, n] = Tlw[l, iw] if iw == imw else Tlw[l, iw] + Tlw[l, imw]
+
+        Twl_interp = self.bases.basis_b.uhat(wn_indices).T
+        Tww = np.dot(Twl_interp, Tlw_pos)
+
+        Ow_shape = Ow.shape
+        Ow = Ow.reshape(Ow.shape[0], -1)
+        Ow_interp = np.dot(Tww, Ow)
+
+        Ow = Ow.reshape(Ow_shape)
+        Ow_interp = Ow_interp.reshape((wn_indices.shape[0],) + Ow_shape[1:])
+        return Ow_interp
+
     def tau_interpolate(self, Ot, tau_mesh_interp, stats: str):
         """
          Interpolate a dynamic object to arbitrary points on the imaginary-time axis.
@@ -248,7 +369,58 @@ class IAFT(object):
         Ot_interp = Ot_interp.reshape((np.shape(tau_mesh_interp)[0],) + Ot_shape[1:])
         return Ot_interp
 
+    def tau_interpolate_phsym(self, Ot, tau_mesh_interp, stats: str):
+        """
+         Interpolate a dynamic object to arbitrary points on the imaginary-time axis.
+
+        :param Ot: numpy.ndarray
+            Dynamic object on the imaginary-time sampling points, self.tau_mesh.
+        :param tau_mesh_interp: numpy.ndarray(dim=1, dtype=float)
+            Target tau points.
+        :param stats: str
+            Statistics, 'f' for fermions and 'b' for bosons
+
+        :return: numpy.ndarray
+            Imaginary-time object with dimensions (nt_interp, ...)
+        """
+        if stats != 'b':
+            raise ValueError("FT w/ particle-hole symmetry only support bosonic correlation functions")
+
+        nw_half = self.nw_b // 2 if self.nw_b % 2 == 0 else self.nw_b // 2 + 1
+        nt_half = self.nt_b // 2 if self.nt_b % 2 == 0 else self.nt_b // 2 + 1
+        if Ot.shape[0] != nt_half:
+            raise ValueError(
+                "tau_interpolate_phsym: Number of tau points are inconsistent: {} and {}".format(Ot.shape[0], nw_half))
+
+        Tlt = self.Tlt_ff if stats == 'f' else self.Tlt_bb
+        Tlt_pos = np.zeros((Tlt.shape[0], nt_half), dtype=Tlt.dtype)
+        for l in range(Tlt.shape[0]):
+            for it in range(nt_half):
+                imt = self.nt_b - it - 1
+                Tlt_pos[l, it] = Tlt[l, it] if it == imt else Tlt[l, it] + Tlt[l, imt]
+
+        Ttl_interp = self.bases.basis_b.u(tau_mesh_interp).T
+        Ttt = np.dot(Ttl_interp, Tlt_pos)
+
+        Ot_shape = Ot.shape
+        Ot = Ot.reshape(Ot.shape[0], -1)
+        Ot_interp = np.dot(Ttt, Ot)
+
+        Ot = Ot.reshape(Ot_shape)
+        Ot_interp = Ot_interp.reshape((np.shape(tau_mesh_interp)[0],) + Ot_shape[1:])
+        return Ot_interp
+
     def check_leakage(self, Ot, stats: str, name: str = "", w_input: bool = False):
+        """
+        Check decay of the IR coefficients to assess the quality of IR basis for the beta and lambda.
+        The coefficients should decay exponentially, and the leakage is defined as:
+            leakage = the smallest coefficients / the largest coefficients
+        :param Ot:
+        :param stats:
+        :param name:
+        :param w_input:
+        :return:
+        """
         if w_input:
             Ot_ = self.w_to_tau(Ot, stats)
             self.check_leakage(Ot_, stats, name, w_input=False)

@@ -259,6 +259,8 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
             general_params['dlr_wmax'], general_params['dlr_eps'],
             it_1e = gw_params['it_1e'],
             it_2e = gw_params['it_2e'],
+            delta_calc_type = gw_params['delta_calc_type'],
+            delta_bath_fit = gw_params['delta_bath_fit']
         )
         gw_params.update(gw_data)
     mpi.barrier()
@@ -362,29 +364,17 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
 
             # prepare solver input
             imp_eal = sumk.block_structure.convert_matrix(gw_params['Hloc0'][ish], ish_from=ish, space_from='sumk', space_to='solver')
-            for name, g0 in G0_dlr:
-                # Estimate the HF shift
-                G0_iw = solvers[ish].G0_freq[name]
-                Delta_iw = Gf(mesh=G0_iw.mesh, target_shape=G0_iw.target_shape)
-                Delta_iw << iOmega_n - inverse(G0_iw)
-                tail, err = fit_hermitian_tail(Delta_iw)
-                # overwrite H0 using estimation from high-frequency tail
-                imp_eal[name] = tail[0]
-                mpi.report(f"Tail fitting for extracting the HF shift in g_weiss with error {err}")
+            Delta_dlr = sumk.block_structure.convert_gf(gw_params['delta_dlr'][ish], ish_from=ish, space_from='sumk', space_to='solver')
 
+            for name, delta in Delta_dlr:
                 if mpi.is_master_node():
                     print('H_loc0[{:2d}] block: {}'.format(ish, name))
                     fmt = '{:11.7f}' * imp_eal[name].shape[0]
                     for block in imp_eal[name]:
                         print((' '*11 + fmt).format(*block.real))
 
-                G0_dlr_iw = make_gf_dlr_imfreq(g0)
-                Delta_dlr_iw = Gf(mesh=G0_dlr_iw.mesh, target_shape=g0.target_shape)
-                for iw in G0_dlr_iw.mesh:
-                    Delta_dlr_iw[iw] = iw.value - inverse(G0_dlr_iw[iw]) - imp_eal[name]
-                Delta_dlr = make_gf_dlr(Delta_dlr_iw)
                 # create now full delta(tau)
-                Delta_tau = make_hermitian(make_gf_imtime(Delta_dlr, n_tau=general_params['n_tau']))
+                Delta_tau = make_hermitian(make_gf_imtime(delta, n_tau=general_params['n_tau']))
 
                 # without SOC delta_tau needs to be real
                 if not sumk.SO == 1:
@@ -515,6 +505,8 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
 
 
     # Writes results to h5 archive
+    mpi.report('Writing iter {} results to h5 archives {}/{}.h5 and {}.'.format(
+        iteration, general_params['jobname'], general_params['seedname'], gw_params['h5_file']))
     if mpi.is_master_node():
         with HDFArchive(general_params['jobname'] + '/' + general_params['seedname'] + '.h5', 'a') as ar:
             results_to_archive.write(ar, sumk, general_params, solver_params, solvers,

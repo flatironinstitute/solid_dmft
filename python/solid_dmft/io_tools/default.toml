@@ -197,6 +197,8 @@ h5_file = "<none>"
 use_rot = false
 it_1e = 0
 it_2e = 0
+delta_calc_type = "tail_fit"
+delta_bath_fit = false
 
 [advanced]
 dc_factor = "<none>"
