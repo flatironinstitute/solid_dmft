@@ -102,6 +102,97 @@ def check_iaft_accuracy(Aw, ir_kernel, stats,
     mpi.report('=================== done ===================\n')
 
 
+def estimate_zero_moment(Aw, iw_mesh):
+    iw_m1 = iw_mesh[-1]
+    iw_m2 = iw_mesh[-2]
+    t = Aw[-1].real - (Aw[-1] - Aw[-2]).real * iw_m2 ** 2 / (
+           iw_m2 ** 2 - iw_m1 ** 2)
+    t = t.astype(complex)
+
+    return t
+
+
+def extract_t_and_delta(g_weiss_wsIab, ir_kernel):
+    iwn_mesh_imp = ir_kernel.wn_mesh('f') * np.pi / ir_kernel.beta
+
+    ns, nImp = g_weiss_wsIab.shape[1:3]
+    weiss_tmp = np.zeros(g_weiss_wsIab.shape, dtype=complex)
+    for n, g in enumerate(g_weiss_wsIab):
+        for s in range(ns):
+            for I in range(nImp):
+                weiss_tmp[n, s, I] = 1j * iwn_mesh_imp[n] - np.linalg.inv(g[s, I])
+
+    t_sIab_estimate = estimate_zero_moment(weiss_tmp, iwn_mesh_imp)
+
+    # construct delta: delta(iw) = iw - t - g^{-1}(iw)
+    delta_estimate = np.zeros(g_weiss_wsIab.shape, dtype=complex)
+    nbnd = t_sIab_estimate.shape[-1]
+    for n in range(delta_estimate.shape[0]):
+        for s in range(ns):
+            for I in range(nImp):
+                g_weiss_inv = np.linalg.inv(g_weiss_wsIab[n, 0, 0])
+                delta_estimate[n, s, I] = 1j * iwn_mesh_imp[n] * np.eye(nbnd) - t_sIab_estimate[s, I] - g_weiss_inv
+    ir_kernel.check_leakage(delta_estimate, 'f', 'delta_estimate', w_input=True)
+
+    return t_sIab_estimate, delta_estimate
+
+
+def read_t_and_delta(aimb_h5, it_1e=None):
+    mpi.report(f"Reading the analytic H_loc0 and the corresponding hybridization from aimbes h5 {aimb_h5}.")
+    with HDFArchive(aimb_h5, 'r') as ar:
+        if not it_1e:
+            it_1e = ar['downfold_1e/final_iter']
+        iter_grp = ar[f'downfold_1e/iter{it_1e}']
+
+        t_sIab = iter_grp['H0_sIab'] + iter_grp['Vhf_gw_sIab'] - iter_grp['Vhf_dc_sIab']
+        if 'Vcorr_gw_sIab' in iter_grp:
+            t_sIab += (iter_grp['Vcorr_gw_sIab'] - iter_grp['Vcorr_dc_sIab'])
+
+        nspin, nImp, nOrbs = t_sIab.shape[:3]
+        for s in np.arange(nspin):
+            for I in range(nImp):
+                t_sIab[s, I] -= np.eye(nOrbs) * iter_grp["mu"]
+
+        delta_wsIab = iter_grp['delta_wsIab']
+
+    return t_sIab, delta_wsIab
+
+
+def tail_fit_g_weiss(g_weiss_wsIab, ir_kernel, gw_data, wmax_imp=None, eps_imp=None):
+    mpi.report("Extracting H_loc0 and hybridization from tail fitting fermionic Weiss field g.")
+    # if user-defined wmax and eps for the impurity
+    if wmax_imp is not None or eps_imp is not None:
+        ir_imp_kernel = IAFT(beta=gw_data['beta'],
+                             lmbda=gw_data['beta'] * gw_data['gw_dlr_wmax'],
+                             prec=gw_data['gw_ir_prec'], verbal=False)
+        g_imp = ir_kernel.w_interpolate(g_weiss_wsIab, ir_imp_kernel.wn_mesh('f'), 'f')
+        ir_imp_kernel.check_leakage(g_imp, 'f', "fermionic Weiss field on the customized imaginary meshes",
+                                    w_input=True)
+    else:
+        ir_imp_kernel = ir_kernel
+        g_imp = g_weiss_wsIab
+
+    mpi.report("")
+    # extracting H0 and Delta from g_weiss
+    t_sIab, delta_wsIab = extract_t_and_delta(g_imp, ir_imp_kernel)
+
+    return t_sIab, delta_wsIab, ir_imp_kernel
+
+
+def bath_fitting(delta_wsIab, iw_mesh, Np=5):
+    mpi.report(f"Bath fitting for hybridization with nbath/impurity orbital = {Np}")
+    from adapol import hybfit
+    nspin, nImp = delta_wsIab.shape[1:3]
+    error = -1
+    for s in np.arange(nspin):
+        for I in range(nImp):
+            bath_energy, bath_hyb, fit_error, func = hybfit(delta_wsIab[:, s, I], 1j*iw_mesh,
+                                                            Np=5, solver='sdp', verbose=False)
+            delta_wsIab[:, s, I] = func(1j*iw_mesh)
+            error = max(error, abs(fit_error))
+    mpi.report(f"Bath fitting error =  {error}")
+
+
 def calc_Sigma_DC_gw(Wloc_dlr, Gloc_dlr, Vloc, verbose=False):
     r"""
     Calculate the double counting part of the self-energy from the screened Coulomb interaction
@@ -301,7 +392,9 @@ def calc_W_from_Gloc(Gloc_dlr, U):
 
 
 def convert_gw_output(job_h5, gw_h5, dlr_wmax=None, dlr_eps=None,
-                      it_1e=0, it_2e=0, ha_ev_conv = False):
+                      it_1e=0, it_2e=0,
+                      delta_calc_type="tail_fit", delta_bath_fit=False,
+                      ha_ev_conv = False):
     """
     read bdft output and convert to triqs Gf DLR objects
 
@@ -391,49 +484,56 @@ def convert_gw_output(job_h5, gw_h5, dlr_wmax=None, dlr_eps=None,
             for ir_w in range(Uloc_ir_jk.shape[0]):
                 Uloc_ir[ir_w, or1, or2, or3, or4] = Uloc_ir_jk[ir_w, or1, or3, or2, or4]
 
-        # get Hloc_0
         Vhf_dc_sIab = ar[f'downfold_1e/iter{it_1e}']['Vhf_dc_sIab'][0, 0]
         Vhf_sIab = ar[f'downfold_1e/iter{it_1e}']['Vhf_gw_sIab'][0, 0]
-        H0_loc = ar[f'downfold_1e/iter{it_1e}']['H0_sIab']
 
         if 'Vcorr_gw_sIab' in ar[f'downfold_1e/iter{it_1e}']:
             mpi.report('Found Vcorr_sIab in the bdft checkpoint file, '
                        'i.e. Embedding on top of an effective QP Hamiltonian.')
-            Vcorr_sIab = ar[f'downfold_1e/iter{it_1e}/Vcorr_gw_sIab'][0, 0]
-            Vcorr_dc_sIab = ar[f'downfold_1e/iter{it_1e}/Vcorr_dc_sIab'][0, 0]
-            Hloc0 = -1*(np.eye(n_orb) * gw_data['mu_emb'] - H0_loc[0,0] - Vhf_sIab - Vcorr_sIab + Vhf_dc_sIab + Vcorr_dc_sIab)
             qp_emb = True
         else:
             Sigma_wsIab = ar[f'downfold_1e/iter{it_1e}']['Sigma_gw_wsIab']
             qp_emb = False
-            Hloc0 = -1*(np.eye(n_orb) * gw_data['mu_emb'] - H0_loc[0,0] - (Vhf_sIab-Vhf_dc_sIab))
+        mpi.report("")
 
     # get IR object
-    mpi.report('create IR kernel and convert to DLR')
+    mpi.report('Creating IR kernel and convert to DLR.')
     # create IR kernel
-    mpi.report("")
+    mpi.report("\nReading IR representation from aimbes code...")
     ir_kernel = IAFT(beta=gw_data['beta'], lmbda=gw_data['lam'], prec=gw_data['gw_ir_prec'])
 
-    if dlr_wmax is not None or dlr_eps is not None:
-        # check user-defined dlr_wmax and dlr_eps for the impurity
-        check_iaft_accuracy(g_weiss_wsIab, ir_kernel, 'f',
-                            gw_data['beta'], gw_data['gw_dlr_wmax'], gw_data['gw_dlr_prec'],
-                            "fermionic Weiss field g")
-
+    mpi.report("Constructing DLR mesh (wmax, eps) = ({}, {})...".format(gw_data['gw_dlr_wmax'], gw_data['gw_dlr_prec']))
     gw_data['mesh_dlr_iw_b'] = MeshDLRImFreq(
-        beta=gw_data['beta']/conv_fac,
+        beta=gw_data['beta'] / conv_fac,
         statistic='Boson',
-        w_max=gw_data['gw_dlr_wmax']*conv_fac,
+        w_max=gw_data['gw_dlr_wmax'] * conv_fac,
         eps=gw_data['gw_dlr_prec'],
         symmetrize=True
     )
     gw_data['mesh_dlr_iw_f'] = MeshDLRImFreq(
-        beta=gw_data['beta']/conv_fac,
+        beta=gw_data['beta'] / conv_fac,
         statistic='Fermion',
-        w_max=gw_data['gw_dlr_wmax']*conv_fac,
+        w_max=gw_data['gw_dlr_wmax'] * conv_fac,
         eps=gw_data['gw_dlr_prec'],
         symmetrize=True
     )
+
+    if delta_calc_type not in {"analytic", "tail_fit"}:
+        raise ValueError("calc_type must be either \'analytic\' or \'tail_fit\'.")
+
+    if delta_calc_type == "analytic":
+        Hloc0, delta_wsIab = read_t_and_delta(gw_h5, it_1e)
+        ir_imp_kernel = ir_kernel
+    elif delta_calc_type == "tail_fit":
+        Hloc0, delta_wsIab, ir_imp_kernel = tail_fit_g_weiss(g_weiss_wsIab, ir_kernel, gw_data,
+                                                             wmax_imp=dlr_wmax, eps_imp=dlr_eps)
+    if delta_bath_fit:
+        bath_fitting(delta_wsIab, ir_imp_kernel.wn_mesh('f')*np.pi/ir_imp_kernel.beta)
+    Hloc0 = Hloc0[0,0]
+
+    # need to update g_weiss?
+
+    mpi.report("")
 
     (
         U_dlr_list,
@@ -464,7 +564,8 @@ def convert_gw_output(job_h5, gw_h5, dlr_wmax=None, dlr_eps=None,
         G0_dlr = BlockGf(name_list=['up', 'down'], block_list=[temp, temp], make_copies=True)
         G0_dlr_list.append(G0_dlr)
 
-        temp = _get_dlr_from_IR(delta_wsIab[:, 0, ish, :, :]/conv_fac, ir_kernel, gw_data['mesh_dlr_iw_f'], dim=2)
+        # FIXME make consistent usage of ir_kernel and ir_imp_kernel
+        temp = _get_dlr_from_IR(delta_wsIab[:, 0, ish, :, :]/conv_fac, ir_imp_kernel, gw_data['mesh_dlr_iw_f'], dim=2)
         delta_dlr = BlockGf(name_list=['up', 'down'], block_list=[temp, temp], make_copies=True)
         delta_dlr_list.append(delta_dlr)
 
@@ -495,7 +596,7 @@ def convert_gw_output(job_h5, gw_h5, dlr_wmax=None, dlr_eps=None,
     gw_data['n_orb'] = n_orb_list
 
     # write Uloc / Wloc back to h5 archive
-    mpi.report(f'writing results in {job_h5}/DMFT_input')
+    mpi.report(f'Writing results in {job_h5}/DMFT_input')
 
     with HDFArchive(job_h5, 'a') as ar:
         if 'DMFT_input' not in ar:
