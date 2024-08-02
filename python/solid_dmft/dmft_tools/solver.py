@@ -40,6 +40,34 @@ from solid_dmft.io_tools.dict_to_h5 import prep_params_for_h5
 from . import legendre_filter
 from .matheval import MathExpr
 
+
+# from solid_dmft.dmft_tools.solvers.cthybsolver import CTHYBSolver
+# from solid_dmft.dmft_tools.solvers.ctsegsolver import CTSEGInterface
+from solid_dmft.dmft_tools.solvers.hartreesolver import HartreeInterface
+
+
+def create_solver(general_params, solver_params, sum_k, icrsh, h_int, iteration_offset,
+                    deg_orbs_ftps, gw_params=None, advanced_params=None):
+        '''
+        Dispatch the solver to the correct subclass
+
+        Returns
+        -------
+        solver: subclass of AbstractDMFTSolver
+                instance of the correct solver subclass
+        '''
+        # if solver_params['type'] == 'cthyb':
+        #     return CTHYBSolver(general_params, solver_params, sum_k, icrsh, h_int,
+        #                         iteration_offset, deg_orbs_ftps, gw_params, advanced_params)
+        # elif solver_params['type'] == 'ctseg':
+        #     return CTSEGSolver(general_params, solver_params, sum_k, icrsh, h_int,
+        #                         iteration_offset, deg_orbs_ftps, gw_params, advanced_params)
+        if solver_params['type'] == 'hartree':
+            return HartreeInterface(general_params, solver_params, sum_k, icrsh, h_int,
+                                iteration_offset, deg_orbs_ftps, gw_params, advanced_params)
+        else:
+            raise ValueError(f"Unknown solver type {solver_params['type']}")
+
 def get_n_orbitals(sum_k):
     """
     determines the number of orbitals within the

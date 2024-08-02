@@ -47,7 +47,7 @@ from solid_dmft.version import solid_dmft_hash
 from solid_dmft.version import version as solid_dmft_version
 from solid_dmft.dmft_tools.observables import (calc_dft_kin_en, add_dmft_observables, calc_bandcorr_man, write_obs,
                                          add_dft_values_as_zeroth_iteration, write_header_to_file, prep_observables)
-from solid_dmft.dmft_tools.solver import SolverStructure
+from solid_dmft.dmft_tools.solver import SolverStructure, create_solver
 from solid_dmft.dmft_tools import convergence
 from solid_dmft.dmft_tools import formatter
 from solid_dmft.dmft_tools import interaction_hamiltonian
@@ -506,9 +506,20 @@ def dmft_cycle(general_params, solver_params, advanced_params, dft_params,
     solvers = [None] * sum_k.n_inequiv_shells
     for icrsh in range(sum_k.n_inequiv_shells):
         # Construct the Solver instances
-        solvers[icrsh] = SolverStructure(general_params, solver_params[map_imp_solver[icrsh]],
-                                         gw_params, advanced_params, sum_k, icrsh, h_int[icrsh],
-                                         iteration_offset, deg_orbs_ftps)
+        mpi.report("Creating solver with new interface")
+        solvers[icrsh] = create_solver(general_params = general_params,
+                                       solver_params = solver_params[map_imp_solver[icrsh]],
+                                       gw_params = gw_params,
+                                       advanced_params = advanced_params,
+                                       sum_k= sum_k,
+                                       h_int = h_int[icrsh],
+                                       icrsh= icrsh,
+                                       iteration_offset=iteration_offset,
+                                       deg_orbs_ftps=deg_orbs_ftps)
+
+        # solvers[icrsh] = SolverStructure(general_params, solver_params[map_imp_solver[icrsh]],
+        #                                  gw_params, advanced_params, sum_k, icrsh, h_int[icrsh],
+        #                                  iteration_offset, deg_orbs_ftps)
 
     # store solver hash to archive
     if mpi.is_master_node():
