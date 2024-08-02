@@ -533,9 +533,9 @@ def determine_dc_and_initial_sigma(general_params, gw_params, advanced_params, s
                     # if magmom positive the up channel will be favored
                     for spin_channel in sum_k.gf_struct_solver[icrsh].keys():
                         if 'up' in spin_channel:
-                            start_sigma[icrsh][spin_channel] << -fac + dc_pot[spin_channel]
+                            start_sigma[icrsh][spin_channel] << -np.eye(dc_pot[spin_channel].shape[0])*fac + dc_pot[spin_channel]
                         else:
-                            start_sigma[icrsh][spin_channel] << fac + dc_pot[spin_channel]
+                            start_sigma[icrsh][spin_channel] << np.eye(dc_pot[spin_channel].shape[0])*fac + dc_pot[spin_channel]
                 else:
                     for spin_channel in sum_k.gf_struct_solver[icrsh].keys():
                         start_sigma[icrsh][spin_channel] << dc_pot[spin_channel]
