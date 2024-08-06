@@ -41,9 +41,10 @@ from . import legendre_filter
 from .matheval import MathExpr
 
 
-# from solid_dmft.dmft_tools.solvers.cthybsolver import CTHYBSolver
-# from solid_dmft.dmft_tools.solvers.ctsegsolver import CTSEGInterface
-from solid_dmft.dmft_tools.solvers.hartreesolver import HartreeInterface
+from solid_dmft.dmft_tools.solvers.cthyb_interface import CTHYBInterface
+# from solid_dmft.dmft_tools.solvers.ctseg_interface import CTSEGInterface
+from solid_dmft.dmft_tools.solvers.hartree_interface import HartreeInterface
+from solid_dmft.dmft_tools.solvers.hubbardI_interface import HubbardIInterface
 
 
 def create_solver(general_params, solver_params, sum_k, icrsh, h_int, iteration_offset,
@@ -56,14 +57,19 @@ def create_solver(general_params, solver_params, sum_k, icrsh, h_int, iteration_
         solver: subclass of AbstractDMFTSolver
                 instance of the correct solver subclass
         '''
-        # if solver_params['type'] == 'cthyb':
-        #     return CTHYBSolver(general_params, solver_params, sum_k, icrsh, h_int,
-        #                         iteration_offset, deg_orbs_ftps, gw_params, advanced_params)
-        # elif solver_params['type'] == 'ctseg':
-        #     return CTSEGSolver(general_params, solver_params, sum_k, icrsh, h_int,
-        #                         iteration_offset, deg_orbs_ftps, gw_params, advanced_params)
-        if solver_params['type'] == 'hartree':
-            return HartreeInterface(general_params, solver_params, sum_k, icrsh, h_int,
+        # dictionary with all interfaces
+        interfaces_dict = {
+                'cthyb':CTHYBInterface,
+                # 'ctseg':CTSEGInterface,
+                # 'ctint':CTINTInterface,
+                'hubbardI':HubbardIInterface,
+                'hartree':HartreeInterface,
+        }
+
+        if solver_params['type'] in interfaces_dict.keys():
+            mpi.report(f"Using {solver_params['type']} solver")
+            solver_interface = interfaces_dict[solver_params['type']] 
+            return solver_interface(general_params, solver_params, sum_k, icrsh, h_int,
                                 iteration_offset, deg_orbs_ftps, gw_params, advanced_params)
         else:
             raise ValueError(f"Unknown solver type {solver_params['type']}")

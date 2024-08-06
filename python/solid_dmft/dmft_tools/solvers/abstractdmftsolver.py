@@ -70,11 +70,9 @@ class AbstractDMFTSolver(ABC):
     iteration_offset: int
             number of iterations this run is based on
     '''
-    # dispatch the solver to the correct subclass
-
-            
-    
-
+    # ********************************************************************
+    # General initialization common to all solvers
+    # ********************************************************************
 
     def __init__(self, general_params, solver_params, sum_k, icrsh, h_int, iteration_offset,
                   deg_orbs_ftps, gw_params=None, advanced_params=None):
@@ -88,17 +86,23 @@ class AbstractDMFTSolver(ABC):
         self.h_int = h_int
         self.iteration_offset = iteration_offset
         self.deg_orbs_ftps = deg_orbs_ftps
-
-
-
-
-
-
-
         
+        
+        
+        if self.solver_params.get('crm_dyson_solver'):
+            self.G_time_dlr = None
+            self.Sigma_dlr = None
 
-    
-    
+        if self.solver_params.get('measure_density_matrix'):
+            self.density_matrix = None
+            self.h_loc_diagonalization = None
+
+        if self.solver_params.get('measure_chi') is not None:
+            self.O_time = None
+
+        if self.solver_params.get('delta_interface'):
+            self.Hloc_0 = Operator()
+
     
     # ********************************************************************
     # initialize Freq and Time objects
@@ -129,11 +133,7 @@ class AbstractDMFTSolver(ABC):
         self.Delta_time = self.G_time.copy()
 
         # create all Legendre instances
-        if (self.solver_params['type'] in ['cthyb']
-                and (self.solver_params['measure_G_l'] or self.solver_params['legendre_fit'])
-                or self.solver_params['type'] == 'ctseg' and self.solver_params['legendre_fit']
-                or self.solver_params['type'] == 'hubbardI' and self.solver_params['measure_G_l']):
-
+        if (self.solver_params.get('measure_G_l') or self.solver_params.get('legendre_fit')):
             self.n_l = self.solver_params['n_l']
             self.G_l = self.sum_k.block_structure.create_gf(ish=self.icrsh, gf_function=Gf, space='solver',
                                                             mesh=MeshLegendre(beta=self.general_params['beta'],
@@ -141,20 +141,10 @@ class AbstractDMFTSolver(ABC):
                                                             )
             # move original G_freq to G_freq_orig
             self.G_time_orig = self.G_time.copy()
+        
 
-        if self.solver_params['type'] in ['cthyb', 'ctseg'] and self.solver_params['crm_dyson_solver']:
-            self.G_time_dlr = None
-            self.Sigma_dlr = None
 
-        if self.solver_params['type'] in ['cthyb', 'hubbardI'] and self.solver_params['measure_density_matrix']:
-            self.density_matrix = None
-            self.h_loc_diagonalization = None
 
-        if self.solver_params['type'] == 'cthyb' and self.solver_params['measure_chi'] is not None:
-            self.O_time = None
-
-        if self.solver_params['type'] in ['cthyb'] and self.solver_params['delta_interface']:
-            self.Hloc_0 = Operator()
 
     def _init_ReFreq_objects(self):
         r'''
@@ -349,6 +339,7 @@ class AbstractDMFTSolver(ABC):
 
         return Sigma_fit, tail_barr
     
+
     def _make_spin_equal(self, Sigma):
 
         # if not SOC than average up and down
