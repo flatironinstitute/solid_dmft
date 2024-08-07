@@ -7,6 +7,7 @@ Contains unit tests for dmft_cycle
 import sys
 sys.path.append('./src')
 
+from h5 import HDFArchive
 from solid_dmft.dmft_tools import afm_mapping
 from helper import are_iterables_equal
 
@@ -15,7 +16,10 @@ import unittest
 class test_afm_mapping(unittest.TestCase):
     def test_determine_afm_mapping(self):
         general_params = {'magmom': [+1, -1, +1, -1], 'afm_order': True}
-        archive = {'DMFT_input': {}}
+        archive = 'test.h5'
+        with HDFArchive(archive, 'w') as ar:
+            ar.create_group('DMFT_input')
+            ar['DMFT_input']= {}
         n_inequiv_shells = 4
 
         expected_general_params = general_params.copy()
@@ -28,7 +32,9 @@ class test_afm_mapping(unittest.TestCase):
         assert are_iterables_equal(general_params, expected_general_params)
 
         general_params = {'magmom': [+1, -1, +2, +2], 'afm_order': True}
-        archive = {'DMFT_input': {}}
+        with HDFArchive(archive, 'w') as ar:
+            ar.create_group('DMFT_input')
+            ar['DMFT_input']= {}
         n_inequiv_shells = 4
 
         expected_general_params = general_params.copy()
@@ -42,8 +48,10 @@ class test_afm_mapping(unittest.TestCase):
 
         # Reading in the afm_mapping from the archive
         general_params = {'magmom': [+1, -1, +2], 'afm_order': True}
-        archive = {'DMFT_input': {'afm_mapping': [[False, 0, False], [False, 1, False],
-                                                  [False, 2, False]]}}
+        with HDFArchive(archive, 'w') as ar:
+            ar.create_group('DMFT_input')
+            ar['DMFT_input']= {'afm_mapping': [[False, 0, False], [False, 1, False],
+                                                  [False, 2, False]]}
         n_inequiv_shells = 3
 
         expected_general_params = general_params.copy()
@@ -56,7 +64,9 @@ class test_afm_mapping(unittest.TestCase):
         assert are_iterables_equal(general_params, expected_general_params)
 
         general_params = {'magmom': [+1, -1, +2, +2], 'afm_order': True}
-        archive = {'DMFT_input': {}}
+        with HDFArchive(archive, 'w') as ar:
+            ar.create_group('DMFT_input')
+            ar['DMFT_input']= {}
         n_inequiv_shells = 3
 
         expected_general_params = general_params.copy()

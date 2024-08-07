@@ -299,18 +299,19 @@ def _load_sigma_from_h5(h5_archive, iteration):
     internal_path = 'DMFT_results/'
     internal_path += 'last_iter' if iteration == -1 else 'it_{}'.format(iteration)
 
-    n_inequiv_shells = h5_archive['dft_input']['n_inequiv_shells']
+    with HDFArchive(h5_archive, 'r') as ar:
+        n_inequiv_shells = ar['dft_input']['n_inequiv_shells']
 
-    # Loads previous self-energies and DC
-    self_energies = [h5_archive[internal_path]['Sigma_freq_{}'.format(iineq)]
-                     for iineq in range(n_inequiv_shells)]
-    last_g0 = [h5_archive[internal_path]['G0_freq_{}'.format(iineq)]
-                     for iineq in range(n_inequiv_shells)]
-    dc_imp = h5_archive[internal_path]['DC_pot']
-    dc_energy = h5_archive[internal_path]['DC_energ']
+        # Loads previous self-energies and DC
+        self_energies = [ar[internal_path]['Sigma_freq_{}'.format(iineq)]
+                         for iineq in range(n_inequiv_shells)]
+        last_g0 = [ar[internal_path]['G0_freq_{}'.format(iineq)]
+                         for iineq in range(n_inequiv_shells)]
+        dc_imp = ar[internal_path]['DC_pot']
+        dc_energy = ar[internal_path]['DC_energ']
 
-    # Loads density_matrix to recalculate DC if dc_dmft
-    density_matrix = h5_archive[internal_path]['dens_mat_post']
+        # Loads density_matrix to recalculate DC if dc_dmft
+        density_matrix = ar[internal_path]['dens_mat_post']
 
     print('Loaded Sigma_imp0...imp{} '.format(n_inequiv_shells-1)
           + ('at last it ' if iteration == -1 else 'at it {} '.format(iteration)))
@@ -495,9 +496,8 @@ def determine_dc_and_initial_sigma(general_params, gw_params, advanced_params, s
         # Loads Sigma from different calculation
         elif general_params['load_sigma']:
             print('\nFrom {}:'.format(general_params['path_to_sigma']), end=' ')
-            with HDFArchive(general_params['path_to_sigma'], 'r') as sigma_archive:
-                (loaded_sigma, loaded_dc_imp, _,
-                 _, loaded_density_matrix) = _load_sigma_from_h5(sigma_archive, general_params['load_sigma_iter'])
+            (loaded_sigma, loaded_dc_imp, _,
+             _, loaded_density_matrix) = _load_sigma_from_h5(general_params['path_to_sigma'], general_params['load_sigma_iter'])
 
             # Recalculate double counting in case U, J or DC formula changed
             if general_params['dc']:

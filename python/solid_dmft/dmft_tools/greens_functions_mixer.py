@@ -28,6 +28,7 @@ import numpy as np
 
 # triqs
 import triqs.utility.mpi as mpi
+from h5 import HDFArchive
 from triqs.gf import MeshImFreq, MeshImTime, Gf, make_gf_from_fourier
 from triqs.gf.descriptors import Fourier
 from triqs.gf.tools import inverse
@@ -194,14 +195,15 @@ def mix_g0(solver, general_params, icrsh, archive, G0_freq_previous, it, deg_she
         mpi.report('\n############\n!!!! WARNING !!!! broyden mixing is still in early testing stage ! Use with caution.\n############\n')
         # TODO implement broyden mixing for Sigma
         if mpi.is_master_node():
-            broyler = archive['DMFT_results']['broyler']
-            # calculate the next G0 via broyden scheme
-            G0_broyden_update, broyler[icrsh] = _broyden_update(it, broyler[icrsh], general_params,
-                                                                deg_shell, solver.G0_freq,
-                                                                G0_freq_previous)
-            # store broyden update to h5 archive
-            archive['DMFT_results']['broyler'] = broyler
-            solver.G0_freq << G0_broyden_update
+            with HDFArchive(archive, 'a') as ar:
+                broyler = ar['DMFT_results']['broyler']
+                # calculate the next G0 via broyden scheme
+                G0_broyden_update, broyler[icrsh] = _broyden_update(it, broyler[icrsh], general_params,
+                                                                    deg_shell, solver.G0_freq,
+                                                                    G0_freq_previous)
+                # store broyden update to h5 archive
+                ar['DMFT_results']['broyler'] = broyler
+                solver.G0_freq << G0_broyden_update
 
         solver.G0_freq << mpi.bcast(solver.G0_freq)
 

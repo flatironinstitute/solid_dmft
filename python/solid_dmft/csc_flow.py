@@ -29,6 +29,7 @@ from timeit import default_timer as timer
 import subprocess
 import shlex
 import os
+import gc
 import numpy as np
 
 # triqs
@@ -89,8 +90,8 @@ def _run_w90converter(seedname, tolerance):
 
     # Checks if creating of rot_mat succeeded
     if mpi.is_master_node():
-        with HDFArchive(seedname+'.h5', 'r') as archive:
-            assert archive['dft_input']['use_rotations'], 'Creation of rot_mat failed in W90 converter'
+        with HDFArchive(seedname+'.h5', 'r') as ar:
+            assert ar['dft_input']['use_rotations'], 'Creation of rot_mat failed in W90 converter'
     mpi.barrier()
 
 def _full_qe_run(seedname, dft_params, mode):
@@ -248,7 +249,8 @@ def csc_flow_control(general_params, solver_params, dft_params, gw_params, advan
     """
 
     # Removes legacy file vasp.suppress_projs if present
-    vasp.remove_legacy_projections_suppressed()
+    if dft_params['dft_code'] == 'vasp':
+        vasp.remove_legacy_projections_suppressed()
 
     # if GAMMA file already exists, load it by doing extra DFT iterations
     if dft_params['dft_code'] == 'vasp' and os.path.exists('GAMMA'):
@@ -259,9 +261,9 @@ def csc_flow_control(general_params, solver_params, dft_params, gw_params, advan
     # Reads in iteration offset if restarting
     iteration_offset = 0
     if mpi.is_master_node() and os.path.isfile(general_params['seedname']+'.h5'):
-        with HDFArchive(general_params['seedname']+'.h5', 'r') as archive:
-            if 'DMFT_results' in archive and 'iteration_count' in archive['DMFT_results']:
-                iteration_offset = archive['DMFT_results']['iteration_count']
+        with HDFArchive(general_params['seedname']+'.h5', 'r') as ar:
+            if 'DMFT_results' in ar and 'iteration_count' in ar['DMFT_results']:
+                iteration_offset = ar['DMFT_results']['iteration_count']
     iteration_offset = mpi.bcast(iteration_offset)
 
     iter_dmft = iteration_offset+1
@@ -358,6 +360,9 @@ def csc_flow_control(general_params, solver_params, dft_params, gw_params, advan
         mpi.barrier()
         end_time_dft = timer()
         mpi.report('  solid_dmft: DFT cycle took {:10.3f} seconds'.format(end_time_dft-start_time_dft))
+
+        del sum_k
+        gc.collect()
 
     # Kills background VASP process for clean end
     if mpi.is_master_node() and dft_params['dft_code'] == 'vasp':

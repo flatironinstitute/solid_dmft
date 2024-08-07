@@ -31,6 +31,7 @@ import numpy as np
 
 # triqs
 import triqs.utility.mpi as mpi
+from h5 import HDFArchive
 from triqs.gf import Gf, MeshImTime
 from triqs.atom_diag import trace_rho_op
 from triqs.gf.descriptors import Fourier
@@ -52,13 +53,14 @@ def prep_observables(h5_archive, sum_k):
         observable array for calculation
     """
 
-    # determine number of impurities
-    n_inequiv_shells = h5_archive['dft_input']['n_inequiv_shells']
+    with HDFArchive(h5_archive, 'r') as ar:
+        # determine number of impurities
+        n_inequiv_shells = ar['dft_input']['n_inequiv_shells']
 
-    # check for previous iterations
-    obs_prev = []
-    if 'observables' in h5_archive['DMFT_results']:
-        obs_prev = h5_archive['DMFT_results']['observables']
+        # check for previous iterations
+        obs_prev = []
+        if 'observables' in ar['DMFT_results']:
+            obs_prev = ar['DMFT_results']['observables']
 
     # prepare observable dicts
     if len(obs_prev) > 0:

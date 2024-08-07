@@ -24,6 +24,7 @@
 ################################################################################
 
 import numpy as np
+from h5 import HDFArchive
 import triqs.utility.mpi as mpi
 
 def determine(general_params, archive, n_inequiv_shells):
@@ -36,42 +37,43 @@ def determine(general_params, archive, n_inequiv_shells):
     afm_mapping = None
     if mpi.is_master_node():
         # Reads mapping from h5 archive if it exists already from a previous run
-        if 'afm_mapping' in archive['DMFT_input']:
-            afm_mapping = archive['DMFT_input']['afm_mapping']
-        elif len(general_params['magmom']) == n_inequiv_shells:
-            # find equal or opposite spin imps, where we use the magmom array to
-            # identity those with equal numbers or opposite
-            # [copy Yes/False, from where, switch up/down channel]
-            afm_mapping = [None] * n_inequiv_shells
-            abs_moms = np.abs(general_params['magmom'])
+        with HDFArchive(archive, 'a') as ar:
+            if 'afm_mapping' in ar['DMFT_input']:
+                afm_mapping = ar['DMFT_input']['afm_mapping']
+            elif len(general_params['magmom']) == n_inequiv_shells:
+                # find equal or opposite spin imps, where we use the magmom array to
+                # identity those with equal numbers or opposite
+                # [copy Yes/False, from where, switch up/down channel]
+                afm_mapping = [None] * n_inequiv_shells
+                abs_moms = np.abs(general_params['magmom'])
 
-            for icrsh in range(n_inequiv_shells):
-                # if the moment was seen before ...
-                previous_occurences = np.nonzero(np.isclose(abs_moms[:icrsh], abs_moms[icrsh]))[0]
-                if previous_occurences.size > 0:
-                    # find the source imp to copy from
-                    source = np.min(previous_occurences)
-                    # determine if we need to switch up and down channel
-                    switch = np.isclose(general_params['magmom'][icrsh], -general_params['magmom'][source])
+                for icrsh in range(n_inequiv_shells):
+                    # if the moment was seen before ...
+                    previous_occurences = np.nonzero(np.isclose(abs_moms[:icrsh], abs_moms[icrsh]))[0]
+                    if previous_occurences.size > 0:
+                        # find the source imp to copy from
+                        source = np.min(previous_occurences)
+                        # determine if we need to switch up and down channel
+                        switch = np.isclose(general_params['magmom'][icrsh], -general_params['magmom'][source])
 
-                    afm_mapping[icrsh] = [True, source, switch]
-                else:
-                    afm_mapping[icrsh] = [False, icrsh, False]
+                        afm_mapping[icrsh] = [True, source, switch]
+                    else:
+                        afm_mapping[icrsh] = [False, icrsh, False]
 
 
-            print('AFM calculation selected, mapping self energies as follows:')
-            print('imp  [copy sigma, source imp, switch up/down]')
-            print('---------------------------------------------')
-            for i, elem in enumerate(afm_mapping):
-                print('{}: {}'.format(i, elem))
-            print('')
+                print('AFM calculation selected, mapping self energies as follows:')
+                print('imp  [copy sigma, source imp, switch up/down]')
+                print('---------------------------------------------')
+                for i, elem in enumerate(afm_mapping):
+                    print('{}: {}'.format(i, elem))
+                print('')
 
-            archive['DMFT_input']['afm_mapping'] = afm_mapping
+                ar['DMFT_input']['afm_mapping'] = afm_mapping
 
-        # if anything did not work set afm_order false
-        else:
-            print('WARNING: couldn\'t determine afm mapping. No mapping used.')
-            general_params['afm_order'] = False
+            # if anything did not work set afm_order false
+            else:
+                print('WARNING: couldn\'t determine afm mapping. No mapping used.')
+                general_params['afm_order'] = False
 
     general_params['afm_order'] = mpi.bcast(general_params['afm_order'])
     if general_params['afm_order']:

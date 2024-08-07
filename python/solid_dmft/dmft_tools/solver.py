@@ -452,18 +452,18 @@ class SolverStructure:
 
             # update solver in h5 archive one last time for debugging if solve command crashes
             if self.general_params['store_solver'] and mpi.is_master_node():
-                with HDFArchive(self.general_params['jobname']+'/'+self.general_params['seedname']+'.h5', 'a') as archive:
-                    if not 'it_-1' in archive['DMFT_input/solver']:
-                        archive['DMFT_input/solver'].create_group('it_-1')
-                    archive['DMFT_input/solver/it_-1'][f'S_{self.icrsh}'] = self.triqs_solver
+                with HDFArchive(self.general_params['jobname']+'/'+self.general_params['seedname']+'.h5', 'a') as ar:
+                    if not 'it_-1' in ar['DMFT_input/solver']:
+                        ar['DMFT_input/solver'].create_group('it_-1')
+                    ar['DMFT_input/solver/it_-1'][f'S_{self.icrsh}'] = self.triqs_solver
                     if self.solver_params['delta_interface']:
-                        archive['DMFT_input/solver/it_-1'][f'Delta_time_{self.icrsh}'] = self.triqs_solver.Delta_tau
+                        ar['DMFT_input/solver/it_-1'][f'Delta_time_{self.icrsh}'] = self.triqs_solver.Delta_tau
                     else:
-                        archive['DMFT_input/solver/it_-1'][f'G0_freq_{self.icrsh}'] = self.triqs_solver.G0_iw
-                    # archive['DMFT_input/solver/it_-1'][f'Delta_freq_{self.icrsh}'] = self.Delta_freq
-                    archive['DMFT_input/solver/it_-1'][f'solve_params_{self.icrsh}'] = prep_params_for_h5(self.solver_params)
-                    archive['DMFT_input/solver/it_-1'][f'triqs_solver_params_{self.icrsh}'] = prep_params_for_h5(self.triqs_solver_params)
-                    archive['DMFT_input/solver/it_-1']['mpi_size'] = mpi.size
+                        ar['DMFT_input/solver/it_-1'][f'G0_freq_{self.icrsh}'] = self.triqs_solver.G0_iw
+                    # ar['DMFT_input/solver/it_-1'][f'Delta_freq_{self.icrsh}'] = self.Delta_freq
+                    ar['DMFT_input/solver/it_-1'][f'solve_params_{self.icrsh}'] = prep_params_for_h5(self.solver_params)
+                    ar['DMFT_input/solver/it_-1'][f'triqs_solver_params_{self.icrsh}'] = prep_params_for_h5(self.triqs_solver_params)
+                    ar['DMFT_input/solver/it_-1']['mpi_size'] = mpi.size
             mpi.barrier()
 
             # Solve the impurity problem for icrsh shell
@@ -580,10 +580,10 @@ class SolverStructure:
             self.Delta_freq_solver = make_positive_definite(self.Delta_freq_solver)
 
             if self.general_params['store_solver'] and mpi.is_master_node():
-                archive = HDFArchive(self.general_params['jobname']+'/'+self.general_params['seedname']+'.h5', 'a')
-                if not 'it_-1' in archive['DMFT_input/solver']:
-                    archive['DMFT_input/solver'].create_group('it_-1')
-                archive['DMFT_input/solver/it_-1']['Delta_orig'] = self.Delta_freq_solver
+                with HDFArchive(self.general_params['jobname']+'/'+self.general_params['seedname']+'.h5', 'a') as ar:
+                    if 'it_-1' not in ar['DMFT_input/solver']:
+                        ar['DMFT_input/solver'].create_group('it_-1')
+                    ar['DMFT_input/solver/it_-1']['Delta_orig'] = self.Delta_freq_solver
 
             # remove off-diagonal terms
             if self.solver_params['diag_delta']:
@@ -657,12 +657,12 @@ class SolverStructure:
             # so for debugging it is done here again
             # store solver to h5 archive
             if self.general_params['store_solver'] and mpi.is_master_node():
-                with HDFArchive(self.general_params['jobname']+'/'+self.general_params['seedname']+'.h5', 'a') as archive:
-                    if not 'it_-1' in archive['DMFT_input/solver']:
-                        archive['DMFT_input/solver'].create_group('it_-1')
-                    archive['DMFT_input/solver'].create_group('it_-1')
-                    archive['DMFT_input/solver/it_-1']['Delta'] = self.Delta_freq_solver
-                    archive['DMFT_input/solver/it_-1']['S_'+str(self.icrsh)] = self.triqs_solver
+                with HDFArchive(self.general_params['jobname']+'/'+self.general_params['seedname']+'.h5', 'a') as ar:
+                    if not 'it_-1' in ar['DMFT_input/solver']:
+                        ar['DMFT_input/solver'].create_group('it_-1')
+                    ar['DMFT_input/solver'].create_group('it_-1')
+                    ar['DMFT_input/solver/it_-1']['Delta'] = self.Delta_freq_solver
+                    ar['DMFT_input/solver/it_-1']['S_'+str(self.icrsh)] = self.triqs_solver
 
             # Solve the impurity problem for icrsh shell
             # *************************************
@@ -733,14 +733,14 @@ class SolverStructure:
 
             # update solver in h5 archive one last time for debugging if solve command crashes
             if self.general_params['store_solver'] and mpi.is_master_node():
-                with HDFArchive(self.general_params['jobname']+'/'+self.general_params['seedname']+'.h5', 'a') as archive:
-                    if 'it_-1' not in archive['DMFT_input/solver']:
-                        archive['DMFT_input/solver'].create_group('it_-1')
-                    archive['DMFT_input/solver/it_-1'][f'S_{self.icrsh}'] = self.triqs_solver
-                    archive['DMFT_input/solver/it_-1'][f'Delta_time_{self.icrsh}'] = self.triqs_solver.Delta_tau
-                    archive['DMFT_input/solver/it_-1'][f'solve_params_{self.icrsh}'] = prep_params_for_h5(self.solver_params)
-                    archive['DMFT_input/solver/it_-1'][f'triqs_solver_params_{self.icrsh}'] = prep_params_for_h5(self.triqs_solver_params)
-                    archive['DMFT_input/solver/it_-1']['mpi_size'] = mpi.size
+                with HDFArchive(self.general_params['jobname']+'/'+self.general_params['seedname']+'.h5', 'a') as ar:
+                    if 'it_-1' not in ar['DMFT_input/solver']:
+                        ar['DMFT_input/solver'].create_group('it_-1')
+                    ar['DMFT_input/solver/it_-1'][f'S_{self.icrsh}'] = self.triqs_solver
+                    ar['DMFT_input/solver/it_-1'][f'Delta_time_{self.icrsh}'] = self.triqs_solver.Delta_tau
+                    ar['DMFT_input/solver/it_-1'][f'solve_params_{self.icrsh}'] = prep_params_for_h5(self.solver_params)
+                    ar['DMFT_input/solver/it_-1'][f'triqs_solver_params_{self.icrsh}'] = prep_params_for_h5(self.triqs_solver_params)
+                    ar['DMFT_input/solver/it_-1']['mpi_size'] = mpi.size
                     if self.general_params['h_int_type'][self.icrsh] == 'dyn_density_density':
                         archive['DMFT_input/solver/it_-1'][f'Uloc_dlr_2idx_prime_{self.icrsh}'] = Uloc_dlr_2idx_prime
             mpi.barrier()
@@ -829,8 +829,8 @@ class SolverStructure:
         if self.general_params['h_int_type'][self.icrsh] == 'dyn_density_density':
             self.U_iw = None
             if  mpi.is_master_node():
-                with HDFArchive(self.general_params['jobname']+'/'+self.general_params['seedname']+'.h5', 'r') as archive:
-                    self.U_iw = archive['dynamic_U']['U_iw']
+                with HDFArchive(self.general_params['jobname']+'/'+self.general_params['seedname']+'.h5', 'r') as ar:
+                    self.U_iw = ar['dynamic_U']['U_iw']
             self.U_iw = mpi.bcast(self.U_iw)
             n_iw_dyn = self.U_iw[self.icrsh].mesh.last_index()+1
             # Construct the triqs_solver instances

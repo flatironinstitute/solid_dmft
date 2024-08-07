@@ -29,6 +29,7 @@ import os.path
 import numpy as np
 
 # triqs
+from h5 import HDFArchive
 from triqs.gf import MeshImFreq, MeshImTime, MeshReFreq, BlockGf
 from solid_dmft.dmft_tools import solver
 
@@ -183,13 +184,14 @@ def prep_conv_obs(h5_archive):
         conv array for calculation
     """
 
-    # determine number of impurities
-    n_inequiv_shells = h5_archive['dft_input']['n_inequiv_shells']
+    with HDFArchive(h5_archive, 'r') as ar:
+        # determine number of impurities
+        n_inequiv_shells = ar['dft_input']['n_inequiv_shells']
 
-    # check for previous iterations
-    conv_prev = []
-    if 'convergence_obs' in h5_archive['DMFT_results']:
-        conv_prev = h5_archive['DMFT_results']['convergence_obs']
+        # check for previous iterations
+        conv_prev = []
+        if 'convergence_obs' in ar['DMFT_results']:
+            conv_prev = ar['DMFT_results']['convergence_obs']
 
     # prepare observable dicts
     if len(conv_prev) > 0:

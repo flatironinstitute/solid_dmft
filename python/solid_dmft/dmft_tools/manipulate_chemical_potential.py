@@ -31,6 +31,7 @@ next iteration.
 import numpy as np
 
 import triqs.utility.mpi as mpi
+from h5 import HDFArchive
 from triqs.gf import BlockGf, GfImFreq, GfImTime, Fourier, MeshImFreq
 try:
     if mpi.is_master_node():
@@ -242,7 +243,8 @@ def _set_mu_to_gap_middle_with_maxent(general_params, sum_k, gf_lattice_iw, arch
     # Writes spectral function to archive
     if archive is not None:
         unpacked_results = maxent_gf_latt._unpack_maxent_results(maxent_results, mesh)
-        archive['DMFT_results/last_iter']['Alatt_w'] = unpacked_results
+        with HDFArchive(archive, 'a') as ar:
+            ar['DMFT_results/last_iter']['Alatt_w'] = unpacked_results
 
     # Checks if spectral function at Fermi energy below threshold
     spectral_func_threshold = general_params['beta']/np.pi * general_params['mu_gap_gb2_threshold']
@@ -304,7 +306,8 @@ def set_initial_mu(general_params, sum_k, iteration_offset, archive, broadening)
     # If continuing calculation and not updating mu, loads sold value
     if iteration_offset % general_params['mu_update_freq'] != 0:
         if mpi.is_master_node():
-            sum_k.chemical_potential = archive['DMFT_results/last_iter/chemical_potential_pre']
+            with HDFArchive(archive, 'r') as ar:
+                sum_k.chemical_potential = ar['DMFT_results/last_iter/chemical_potential_pre']
         sum_k.chemical_potential = mpi.bcast(sum_k.chemical_potential)
         mpi.report('Chemical potential not updated this step, '
                    + 'reusing loaded one of {:.3f} eV'.format(sum_k.chemical_potential))
@@ -314,7 +317,8 @@ def set_initial_mu(general_params, sum_k, iteration_offset, archive, broadening)
     # chemical_potential_pre from the last run
     previous_mu = None
     if mpi.is_master_node():
-        previous_mu = archive['DMFT_results/last_iter/chemical_potential_pre']
+        with HDFArchive(archive, 'r') as ar:
+            previous_mu = ar['DMFT_results/last_iter/chemical_potential_pre']
     previous_mu = mpi.bcast(previous_mu)
 
     # Runs maxent if spectral weight too low and occupation is close to desired one
