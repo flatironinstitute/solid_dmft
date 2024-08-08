@@ -41,10 +41,47 @@ from . import legendre_filter
 from .matheval import MathExpr
 
 
-from solid_dmft.dmft_tools.solvers.cthyb_interface import CTHYBInterface
-# from solid_dmft.dmft_tools.solvers.ctseg_interface import CTSEGInterface
-from solid_dmft.dmft_tools.solvers.hartree_interface import HartreeInterface
-from solid_dmft.dmft_tools.solvers.hubbardI_interface import HubbardIInterface
+import importlib.util
+
+
+# check which modules are available and import only those ones
+
+interfaces_dict = {}
+
+
+check_solver = importlib.util.find_spec("triqs_cthyb") is not None
+if check_solver:
+    from solid_dmft.dmft_tools.solvers.cthyb_interface import CTHYBInterface
+    interfaces_dict['cthyb'] = CTHYBInterface
+
+check_solver = importlib.util.find_spec("triqs_ctint") is not None
+if check_solver:
+    from solid_dmft.dmft_tools.solvers.ctint_interface import CTINTInterface
+    interfaces_dict['ctint'] = CTINTInterface
+
+check_solver = importlib.util.find_spec("triqs_ctseg") is not None
+if check_solver:
+    from solid_dmft.dmft_tools.solvers.ctseg_interface import CTSEGInterface
+    interfaces_dict['ctseg'] = CTSEGInterface
+
+check_solver = importlib.util.find_spec("triqs_hartree_fock") is not None
+if check_solver:
+    from solid_dmft.dmft_tools.solvers.hartree_interface import HartreeInterface
+    interfaces_dict['hartree'] = HartreeInterface
+
+check_solver = importlib.util.find_spec("triqs_hubbardI") is not None
+if check_solver:
+    from solid_dmft.dmft_tools.solvers.hubbardI_interface import HubbardIInterface
+    interfaces_dict['hubbardI'] = HubbardIInterface
+
+check_solver = importlib.util.find_spec("forktps") is not None
+if check_solver:
+    from solid_dmft.dmft_tools.solvers.ftps_interface import FTPSInterface
+    interfaces_dict['ftps'] = FTPSInterface
+
+
+
+
 
 
 def create_solver(general_params, solver_params, sum_k, icrsh, h_int, iteration_offset,
@@ -57,15 +94,6 @@ def create_solver(general_params, solver_params, sum_k, icrsh, h_int, iteration_
         solver: subclass of AbstractDMFTSolver
                 instance of the correct solver subclass
         '''
-        # dictionary with all interfaces
-        interfaces_dict = {
-                'cthyb':CTHYBInterface,
-                # 'ctseg':CTSEGInterface,
-                # 'ctint':CTINTInterface,
-                'hubbardI':HubbardIInterface,
-                'hartree':HartreeInterface,
-        }
-
         if solver_params['type'] in interfaces_dict.keys():
             mpi.report(f"Using {solver_params['type']} solver")
             solver_interface = interfaces_dict[solver_params['type']] 

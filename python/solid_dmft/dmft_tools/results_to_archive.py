@@ -88,7 +88,7 @@ def _compile_information(sum_k, general_params, solver_params, solvers, map_imp_
                 write_to_h5['G_time_dlr_{}'.format(icrsh)] = solvers[icrsh].G_time_dlr
                 write_to_h5['Sigma_dlr_{}'.format(icrsh)] = solvers[icrsh].Sigma_dlr
 
-        if solver_type_per_imp[icrsh] == 'ctint' and solver_params[isolvsec]['measure_histogram']:
+        if solver_type_per_imp[icrsh] == 'ctint' and solver_params[isolvsec]['measure_pert_order']:
             write_to_h5['pert_order_imp_{}'.format(icrsh)] = solvers[icrsh].perturbation_order
 
         if solver_type_per_imp[icrsh] == 'hubbardI':

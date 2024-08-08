@@ -109,46 +109,45 @@ class CTHYBInterface(AbstractDMFTSolver):
         else:
             assert 'random_seed' not in self.triqs_solver_params
 
-        if self.solver_params['type'] == 'cthyb':
 
-            if self.solver_params['delta_interface']:
-                self.triqs_solver.Delta_tau << self.Delta_time
-                self.triqs_solver_params['h_loc0'] = self.Hloc_0
-            else:
-                # fill G0_freq from sum_k to solver
-                self.triqs_solver.G0_iw << make_hermitian(self.G0_freq)
+        if self.solver_params['delta_interface']:
+            self.triqs_solver.Delta_tau << self.Delta_time
+            self.triqs_solver_params['h_loc0'] = self.Hloc_0
+        else:
+            # fill G0_freq from sum_k to solver
+            self.triqs_solver.G0_iw << make_hermitian(self.G0_freq)
 
-            # update solver in h5 archive one last time for debugging if solve command crashes
-            if self.general_params['store_solver'] and mpi.is_master_node():
-                with HDFArchive(self.general_params['jobname']+'/'+self.general_params['seedname']+'.h5', 'a') as archive:
-                    if not 'it_-1' in archive['DMFT_input/solver']:
-                        archive['DMFT_input/solver'].create_group('it_-1')
-                    archive['DMFT_input/solver/it_-1'][f'S_{self.icrsh}'] = self.triqs_solver
-                    if self.solver_params['delta_interface']:
-                        archive['DMFT_input/solver/it_-1'][f'Delta_time_{self.icrsh}'] = self.triqs_solver.Delta_tau
-                    else:
-                        archive['DMFT_input/solver/it_-1'][f'G0_freq_{self.icrsh}'] = self.triqs_solver.G0_iw
-                    # archive['DMFT_input/solver/it_-1'][f'Delta_freq_{self.icrsh}'] = self.Delta_freq
-                    archive['DMFT_input/solver/it_-1'][f'solve_params_{self.icrsh}'] = prep_params_for_h5(self.solver_params)
-                    archive['DMFT_input/solver/it_-1'][f'triqs_solver_params_{self.icrsh}'] = prep_params_for_h5(self.triqs_solver_params)
-                    archive['DMFT_input/solver/it_-1']['mpi_size'] = mpi.size
-            mpi.barrier()
+        # update solver in h5 archive one last time for debugging if solve command crashes
+        if self.general_params['store_solver'] and mpi.is_master_node():
+            with HDFArchive(self.general_params['jobname']+'/'+self.general_params['seedname']+'.h5', 'a') as archive:
+                if not 'it_-1' in archive['DMFT_input/solver']:
+                    archive['DMFT_input/solver'].create_group('it_-1')
+                archive['DMFT_input/solver/it_-1'][f'S_{self.icrsh}'] = self.triqs_solver
+                if self.solver_params['delta_interface']:
+                    archive['DMFT_input/solver/it_-1'][f'Delta_time_{self.icrsh}'] = self.triqs_solver.Delta_tau
+                else:
+                    archive['DMFT_input/solver/it_-1'][f'G0_freq_{self.icrsh}'] = self.triqs_solver.G0_iw
+                # archive['DMFT_input/solver/it_-1'][f'Delta_freq_{self.icrsh}'] = self.Delta_freq
+                archive['DMFT_input/solver/it_-1'][f'solve_params_{self.icrsh}'] = prep_params_for_h5(self.solver_params)
+                archive['DMFT_input/solver/it_-1'][f'triqs_solver_params_{self.icrsh}'] = prep_params_for_h5(self.triqs_solver_params)
+                archive['DMFT_input/solver/it_-1']['mpi_size'] = mpi.size
+        mpi.barrier()
 
-            # Solve the impurity problem for icrsh shell
-            # *************************************
-            self.triqs_solver.solve(h_int=self.h_int, **self.triqs_solver_params)
-            # *************************************
+        # Solve the impurity problem for icrsh shell
+        # *************************************
+        self.triqs_solver.solve(h_int=self.h_int, **self.triqs_solver_params)
+        # *************************************
 
-            # dump Delta_tau constructed internally from cthyb when delta_interface = False
-            if self.general_params['store_solver'] and mpi.is_master_node():
-                with HDFArchive(self.general_params['jobname'] + '/' + self.general_params['seedname'] + '.h5',
-                                'a') as archive:
-                    if not self.solver_params['delta_interface']:
-                        archive['DMFT_input/solver/it_-1'][f'Delta_time_{self.icrsh}'] = self.triqs_solver.Delta_tau
-            mpi.barrier()
+        # dump Delta_tau constructed internally from cthyb when delta_interface = False
+        if self.general_params['store_solver'] and mpi.is_master_node():
+            with HDFArchive(self.general_params['jobname'] + '/' + self.general_params['seedname'] + '.h5',
+                            'a') as archive:
+                if not self.solver_params['delta_interface']:
+                    archive['DMFT_input/solver/it_-1'][f'Delta_time_{self.icrsh}'] = self.triqs_solver.Delta_tau
+        mpi.barrier()
 
-            # call postprocessing
-            self.postprocess()
+        # call postprocessing
+        self.postprocess()
 
         return 
 

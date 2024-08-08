@@ -517,6 +517,7 @@ def dmft_cycle(general_params, solver_params, advanced_params, dft_params,
                                        iteration_offset=iteration_offset,
                                        deg_orbs_ftps=deg_orbs_ftps)
 
+        # mpi.report("Creating solver with old interface")
         # solvers[icrsh] = SolverStructure(general_params, solver_params[map_imp_solver[icrsh]],
         #                                  gw_params, advanced_params, sum_k, icrsh, h_int[icrsh],
         #                                  iteration_offset, deg_orbs_ftps)

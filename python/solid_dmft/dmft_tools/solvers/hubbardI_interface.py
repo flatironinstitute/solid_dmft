@@ -18,7 +18,7 @@ from solid_dmft.dmft_tools import legendre_filter
 from solid_dmft.dmft_tools.matheval import MathExpr
 
 
-# circular import of the abstract class
+# import of the abstract class
 from solid_dmft.dmft_tools.solvers.abstractdmftsolver import AbstractDMFTSolver
 
 # import triqs solver
