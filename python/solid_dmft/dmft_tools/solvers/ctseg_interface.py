@@ -41,6 +41,11 @@ class CTSEGInterface(AbstractDMFTSolver):
         # sets up necessary GF objects on ImFreq
         self._init_ImFreq_objects()
         
+        if self.solver_params.get('random_seed') is None:
+            self.random_seed_generator = None
+        else:
+            self.random_seed_generator = MathExpr(self.solver_params['random_seed'])
+        
         
 
         # Separately stores all params that go into solve() call of solver
@@ -75,64 +80,70 @@ class CTSEGInterface(AbstractDMFTSolver):
         self.version = version
 
     def solve(self, **kwargs):
-            # fill G0_freq from sum_k to solver
-            self.triqs_solver.Delta_tau << self.Delta_time
+        # what does this do exactly?
+        if self.random_seed_generator is not None:
+            self.triqs_solver_params['random_seed'] = int(self.random_seed_generator(it=kwargs["it"], rank=mpi.rank))
+        else:
+            assert 'random_seed' not in self.triqs_solver_params
 
-            if self.general_params['h_int_type'][self.icrsh] == 'dyn_density_density':
-                mpi.report('add dynamic interaction from AIMBES')
-                # convert 4 idx tensor to two index tensor
-                Uloc_dlr = self.gw_params['Uloc_dlr'][self.icrsh]['up']
-                Uloc_dlr_2idx_prime = Gf(mesh=Uloc_dlr.mesh, target_shape=[Uloc_dlr.target_shape[0],Uloc_dlr.target_shape[1]])
+        # fill G0_freq from sum_k to solver
+        self.triqs_solver.Delta_tau << self.Delta_time
 
-                for coeff in Uloc_dlr.mesh:
-                    Uloc_dlr_idx = Uloc_dlr[coeff]
-                    _, Uprime = reduce_4index_to_2index(Uloc_dlr_idx)
-                    Uloc_dlr_2idx_prime[coeff] = Uprime
+        if self.general_params['h_int_type'][self.icrsh] == 'dyn_density_density':
+            mpi.report('add dynamic interaction from AIMBES')
+            # convert 4 idx tensor to two index tensor
+            Uloc_dlr = self.gw_params['Uloc_dlr'][self.icrsh]['up']
+            Uloc_dlr_2idx_prime = Gf(mesh=Uloc_dlr.mesh, target_shape=[Uloc_dlr.target_shape[0],Uloc_dlr.target_shape[1]])
 
-                # create full frequency objects
-                Uloc_tau_2idx_prime = make_gf_imtime(Uloc_dlr_2idx_prime, n_tau=self.solver_params['n_tau_bosonic'])
+            for coeff in Uloc_dlr.mesh:
+                Uloc_dlr_idx = Uloc_dlr[coeff]
+                _, Uprime = reduce_4index_to_2index(Uloc_dlr_idx)
+                Uloc_dlr_2idx_prime[coeff] = Uprime
 
-                Uloc_tau_2idx_prime_sumk = BlockGf(name_list=['up', 'down'], block_list=[Uloc_tau_2idx_prime, Uloc_tau_2idx_prime])
-                Uloc_tau_2idx_prime_solver = self.sum_k.block_structure.convert_gf(Uloc_tau_2idx_prime_sumk,
-                                                                                   ish_from=self.icrsh,
-                                                                                   space_from='sumk',
-                                                                                   space_to='solver')
+            # create full frequency objects
+            Uloc_tau_2idx_prime = make_gf_imtime(Uloc_dlr_2idx_prime, n_tau=self.solver_params['n_tau_bosonic'])
 
-                # fill D0_tau from Uloc_tau_2idx_prime
-                for iblock, Uloc_i in Uloc_tau_2idx_prime_solver:
-                    for jblock, Uloc_j in Uloc_tau_2idx_prime_solver:
-                        # same spin and opposite spin interaction have same interaction for dynamic part
-                        # Hund's rule does not apply here
-                        self.triqs_solver.D0_tau[iblock, jblock] << Uloc_tau_2idx_prime_solver[iblock]
+            Uloc_tau_2idx_prime_sumk = BlockGf(name_list=['up', 'down'], block_list=[Uloc_tau_2idx_prime, Uloc_tau_2idx_prime])
+            Uloc_tau_2idx_prime_solver = self.sum_k.block_structure.convert_gf(Uloc_tau_2idx_prime_sumk,
+                                                                                ish_from=self.icrsh,
+                                                                                space_from='sumk',
+                                                                                space_to='solver')
 
-                # TODO: add Jerp_Iw to the solver
+            # fill D0_tau from Uloc_tau_2idx_prime
+            for iblock, Uloc_i in Uloc_tau_2idx_prime_solver:
+                for jblock, Uloc_j in Uloc_tau_2idx_prime_solver:
+                    # same spin and opposite spin interaction have same interaction for dynamic part
+                    # Hund's rule does not apply here
+                    self.triqs_solver.D0_tau[iblock, jblock] << Uloc_tau_2idx_prime_solver[iblock]
 
-                # self.triqs_solver. Jperp_iw << make_gf_imfreq(Uloc_dlr_2idx, n_iw=self.general_params['n_w_b_nn']) + V
-            mpi.report('\nLocal interaction Hamiltonian is:',self.h_int)
+            # TODO: add Jerp_Iw to the solver
 
-            # update solver in h5 archive one last time for debugging if solve command crashes
-            if self.general_params['store_solver'] and mpi.is_master_node():
-                with HDFArchive(self.general_params['jobname']+'/'+self.general_params['seedname']+'.h5', 'a') as archive:
-                    if 'it_-1' not in archive['DMFT_input/solver']:
-                        archive['DMFT_input/solver'].create_group('it_-1')
-                    archive['DMFT_input/solver/it_-1'][f'S_{self.icrsh}'] = self.triqs_solver
-                    archive['DMFT_input/solver/it_-1'][f'Delta_time_{self.icrsh}'] = self.triqs_solver.Delta_tau
-                    archive['DMFT_input/solver/it_-1'][f'solve_params_{self.icrsh}'] = prep_params_for_h5(self.solver_params)
-                    archive['DMFT_input/solver/it_-1'][f'triqs_solver_params_{self.icrsh}'] = prep_params_for_h5(self.triqs_solver_params)
-                    archive['DMFT_input/solver/it_-1']['mpi_size'] = mpi.size
-                    if self.general_params['h_int_type'][self.icrsh] == 'dyn_density_density':
-                        archive['DMFT_input/solver/it_-1'][f'Uloc_dlr_2idx_prime_{self.icrsh}'] = Uloc_dlr_2idx_prime
-            mpi.barrier()
+            # self.triqs_solver. Jperp_iw << make_gf_imfreq(Uloc_dlr_2idx, n_iw=self.general_params['n_w_b_nn']) + V
+        mpi.report('\nLocal interaction Hamiltonian is:',self.h_int)
 
-            # turn of problematic move in ctseg until fixed!
-            self.triqs_solver_params['move_move_segment'] = False
-            # Solve the impurity problem for icrsh shell
-            # *************************************
-            self.triqs_solver.solve(h_int=self.h_int, h_loc0=self.Hloc_0, **self.triqs_solver_params)
-            # *************************************
+        # update solver in h5 archive one last time for debugging if solve command crashes
+        if self.general_params['store_solver'] and mpi.is_master_node():
+            with HDFArchive(self.general_params['jobname']+'/'+self.general_params['seedname']+'.h5', 'a') as archive:
+                if 'it_-1' not in archive['DMFT_input/solver']:
+                    archive['DMFT_input/solver'].create_group('it_-1')
+                archive['DMFT_input/solver/it_-1'][f'S_{self.icrsh}'] = self.triqs_solver
+                archive['DMFT_input/solver/it_-1'][f'Delta_time_{self.icrsh}'] = self.triqs_solver.Delta_tau
+                archive['DMFT_input/solver/it_-1'][f'solve_params_{self.icrsh}'] = prep_params_for_h5(self.solver_params)
+                archive['DMFT_input/solver/it_-1'][f'triqs_solver_params_{self.icrsh}'] = prep_params_for_h5(self.triqs_solver_params)
+                archive['DMFT_input/solver/it_-1']['mpi_size'] = mpi.size
+                if self.general_params['h_int_type'][self.icrsh] == 'dyn_density_density':
+                    archive['DMFT_input/solver/it_-1'][f'Uloc_dlr_2idx_prime_{self.icrsh}'] = Uloc_dlr_2idx_prime
+        mpi.barrier()
 
-            # call postprocessing
-            self.postprocess()
+        # turn of problematic move in ctseg until fixed!
+        self.triqs_solver_params['move_move_segment'] = False
+        # Solve the impurity problem for icrsh shell
+        # *************************************
+        self.triqs_solver.solve(h_int=self.h_int, h_loc0=self.Hloc_0, **self.triqs_solver_params)
+        # *************************************
+
+        # call postprocessing
+        self.postprocess()
     
     def postprocess(self):
         r'''
@@ -186,7 +197,9 @@ class CTSEGInterface(AbstractDMFTSolver):
         if mpi.is_master_node():
             # get density density U tensor from solver
             U_dict = extract_U_dict2(self.h_int)
-            norb = self.get_n_orbitals(self.sum_k)[self.icrsh]['up']
+            # print("sum_k is" + self.sum_k.__repr__())
+            norb = self.get_n_orbitals(self.sum_k)
+            norb = norb[self.icrsh]['up']
             U_dd = dict_to_matrix(U_dict, gf_struct=self.sum_k.gf_struct_solver_list[self.icrsh])
             # extract Uijij and Uijji terms
             Uijij = U_dd[0:norb, norb:2*norb]

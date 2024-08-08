@@ -199,7 +199,7 @@ class AbstractDMFTSolver(ABC):
     
 
     # useful functions
-
+    @staticmethod
     def get_n_orbitals(sum_k):
         """
         determines the number of orbitals within the
@@ -225,6 +225,7 @@ class AbstractDMFTSolver(ABC):
 
         return n_orbitals
 
+    @staticmethod
     def _gf_fit_tail_fraction(Gf, fraction=0.4, replace=None, known_moments=[]):
         """
         fits the tail of Gf object by making a polynomial
@@ -265,6 +266,7 @@ class AbstractDMFTSolver(ABC):
 
         return Gf_fit
 
+    @staticmethod
     def _fit_tail_window(
             Sigma_iw,
             fit_min_n=None, fit_max_n=None,
