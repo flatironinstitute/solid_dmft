@@ -327,8 +327,8 @@ def _construct_dynamic(sum_k, general_params, icrsh):
     mpi.report('###### Dynamic U calculation ######, load parameters from input archive.')
     U_onsite = None
     if mpi.is_master_node():
-        with HDFArchive(general_params['jobname']+'/'+general_params['seedname']+'.h5', 'r') as archive:
-            U_onsite = archive['dynamic_U']['U_scr']
+        with HDFArchive(general_params['jobname']+'/'+general_params['seedname']+'.h5', 'r') as ar:
+            U_onsite = ar['dynamic_U']['U_scr']
     U_onsite = mpi.bcast(U_onsite)
 
     n_orb = common.get_n_orbitals(sum_k)[icrsh]['up']

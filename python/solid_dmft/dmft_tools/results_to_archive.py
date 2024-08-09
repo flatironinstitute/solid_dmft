@@ -23,6 +23,7 @@
 ################################################################################
 
 import os
+from h5 import HDFArchive
 import triqs.utility.mpi as mpi
 
 
@@ -142,34 +143,35 @@ def write(archive, sum_k, general_params, solver_params, solvers, map_imp_solver
                                        previous_mu, density_mat_pre, density_mat, deltaN, dens)
 
     # Saves the results to last_iter
-    archive['DMFT_results']['iteration_count'] = it
-    for key, value in write_to_h5.items():
-        archive['DMFT_results/last_iter'][key] = value
-
-    # Permanently saves to h5 archive every h5_save_freq iterations
-    if ((not is_sampling and it % general_params['h5_save_freq'] == 0)
-            or (is_sampling and it % general_params['sampling_h5_save_freq'] == 0)):
-
-        archive['DMFT_results'].create_group('it_{}'.format(it))
+    with HDFArchive(archive, 'a') as ar:
+        ar['DMFT_results']['iteration_count'] = it
         for key, value in write_to_h5.items():
-            # Full density matrix only written to last_iter - it is large
-            if 'full_dens_mat_' not in key and 'h_loc_diag_' not in key:
-                archive['DMFT_results/it_{}'.format(it)][key] = value
+            ar['DMFT_results/last_iter'][key] = value
 
-        # Saves CSC input
-        if general_params['csc']:
-            for dft_var in ['dft_update', 'dft_input', 'dft_misc_input']:
-                if dft_var in archive:
-                    archive['DMFT_results/it_{}'.format(it)].create_group(dft_var)
-                    for key, value in archive[dft_var].items():
-                        # do only store changing elements
-                        if key not in ['symm_kpath', 'kpts_cart']:
-                            archive['DMFT_results/it_{}'.format(it)][dft_var][key] = value
-            for band_elem in ['_bands.dat', '_bands.dat.gnu', '_bands.projwfc_up', '_band.dat']:
-                if os.path.isfile('./{}{}'.format(general_params['seedname'], band_elem)):
-                    os.rename('./{}{}'.format(general_params['seedname'], band_elem),
-                              './{}{}_it{}'.format(general_params['seedname'], band_elem, it))
-            for w90_elem in ['_hr.dat', '.wout']:
-                if os.path.isfile('./{}{}'.format(general_params['seedname'], w90_elem)):
-                    os.rename('./{}{}'.format(general_params['seedname'], w90_elem),
-                              './{}_it{}{}'.format(general_params['seedname'], it, w90_elem))
+        # Permanently saves to h5 archive every h5_save_freq iterations
+        if ((not is_sampling and it % general_params['h5_save_freq'] == 0)
+                or (is_sampling and it % general_params['sampling_h5_save_freq'] == 0)):
+
+            ar['DMFT_results'].create_group('it_{}'.format(it))
+            for key, value in write_to_h5.items():
+                # Full density matrix only written to last_iter - it is large
+                if 'full_dens_mat_' not in key and 'h_loc_diag_' not in key:
+                    ar['DMFT_results/it_{}'.format(it)][key] = value
+
+            # Saves CSC input
+            if general_params['csc']:
+                for dft_var in ['dft_update', 'dft_input', 'dft_misc_input']:
+                    if dft_var in ar:
+                        ar['DMFT_results/it_{}'.format(it)].create_group(dft_var)
+                        for key, value in ar[dft_var].items():
+                            # do only store changing elements
+                            if key not in ['symm_kpath', 'kpts_cart']:
+                                ar['DMFT_results/it_{}'.format(it)][dft_var][key] = value
+                for band_elem in ['_bands.dat', '_bands.dat.gnu', '_bands.projwfc_up', '_band.dat']:
+                    if os.path.isfile('./{}{}'.format(general_params['seedname'], band_elem)):
+                        os.rename('./{}{}'.format(general_params['seedname'], band_elem),
+                                  './{}{}_it{}'.format(general_params['seedname'], band_elem, it))
+                for w90_elem in ['_hr.dat', '.wout']:
+                    if os.path.isfile('./{}{}'.format(general_params['seedname'], w90_elem)):
+                        os.rename('./{}{}'.format(general_params['seedname'], w90_elem),
+                                  './{}_it{}{}'.format(general_params['seedname'], it, w90_elem))

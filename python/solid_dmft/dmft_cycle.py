@@ -27,6 +27,7 @@ main DMFT cycle, DMFT step, and helper functions
 
 
 # system
+import gc
 from copy import deepcopy
 from timeit import default_timer as timer
 import numpy as np
@@ -143,7 +144,7 @@ def _determine_block_structure(sum_k, general_params, advanced_params, solver_ty
     # Applies manual selection of the solver struct
     if any(s is not None for s in advanced_params['pick_solver_struct']):
         mpi.report('selecting subset of orbital space for gf_struct_solver from input:')
-        mpi.report(advanced_params['pick_solver_struct'][icrsh])
+        mpi.report(advanced_params['pick_solver_struct'])
         sum_k.block_structure.pick_gf_struct_solver(advanced_params['pick_solver_struct'])
 
     # Applies the manual mapping to each inequivalent shell
@@ -218,7 +219,8 @@ def _calculate_rotation_matrix(general_params, sum_k):
     # in case sum_k.use_rotations == False before:
     sum_k.use_rotations = True
     # sum_k.eff_atomic_levels() needs to be recomputed if rot_mat were changed
-    if hasattr(sum_k, "Hsumk"): delattr(sum_k, "Hsumk")
+    if hasattr(sum_k, "Hsumk"):
+        delattr(sum_k, "Hsumk")
     mpi.report('Updating rotation matrices using dft {} eigenbasis to maximise sign'.format(general_params['set_rot']))
 
     # Prints matrices
@@ -313,31 +315,30 @@ def dmft_cycle(general_params, solver_params, advanced_params, dft_params,
     iteration_offset = 0
 
     # determine chemical potential for bare DFT sum_k object
+    archive = general_params['jobname']+'/'+general_params['seedname']+'.h5'
     if mpi.is_master_node():
-        archive = HDFArchive(general_params['jobname']+'/'+general_params['seedname']+'.h5', 'a')
-        if 'DMFT_results' not in archive:
-            archive.create_group('DMFT_results')
-        if 'last_iter' not in archive['DMFT_results']:
-            archive['DMFT_results'].create_group('last_iter')
-        if 'DMFT_input' not in archive:
-            archive.create_group('DMFT_input')
-            archive['DMFT_input']['program'] = 'solid_dmft'
-            archive['DMFT_input'].create_group('solver')
-            archive['DMFT_input'].create_group('version')
-            archive['DMFT_input']['version']['triqs_hash'] = triqs_hash
-            archive['DMFT_input']['version']['triqs_version'] = triqs_version
-            archive['DMFT_input']['version']['solid_dmft_hash'] = solid_dmft_hash
-            archive['DMFT_input']['version']['solid_dmft_version'] = solid_dmft_version
+        with HDFArchive(archive, 'a') as ar:
+            if 'DMFT_results' not in ar:
+                ar.create_group('DMFT_results')
+            if 'last_iter' not in ar['DMFT_results']:
+                ar['DMFT_results'].create_group('last_iter')
+            if 'DMFT_input' not in ar:
+                ar.create_group('DMFT_input')
+                ar['DMFT_input']['program'] = 'solid_dmft'
+                ar['DMFT_input'].create_group('solver')
+                ar['DMFT_input'].create_group('version')
+                ar['DMFT_input']['version']['triqs_hash'] = triqs_hash
+                ar['DMFT_input']['version']['triqs_version'] = triqs_version
+                ar['DMFT_input']['version']['solid_dmft_hash'] = solid_dmft_hash
+                ar['DMFT_input']['version']['solid_dmft_version'] = solid_dmft_version
 
-        if 'iteration_count' in archive['DMFT_results']:
-            iteration_offset = archive['DMFT_results/iteration_count']
-            sum_k.chemical_potential = archive['DMFT_results/last_iter/chemical_potential_post']
-            print(f'RESTARTING DMFT RUN at iteration {iteration_offset+1} using last self-energy')
-        else:
-            print('INITIAL DMFT RUN')
-        print('#'*80, '\n')
-    else:
-        archive = None
+            if 'iteration_count' in ar['DMFT_results']:
+                iteration_offset = ar['DMFT_results/iteration_count']
+                sum_k.chemical_potential = ar['DMFT_results/last_iter/chemical_potential_post']
+                print(f'RESTARTING DMFT RUN at iteration {iteration_offset+1} using last self-energy')
+            else:
+                print('INITIAL DMFT RUN')
+            print('#'*80, '\n')
 
     iteration_offset = mpi.bcast(iteration_offset)
     sum_k.chemical_potential = mpi.bcast(sum_k.chemical_potential)
@@ -388,9 +389,10 @@ def dmft_cycle(general_params, solver_params, advanced_params, dft_params,
 
     # check for previous broyden data oterhwise initialize it:
     if mpi.is_master_node() and  general_params['g0_mix_type'] == 'broyden':
-        if not 'broyler' in archive['DMFT_results']:
-            archive['DMFT_results']['broyler'] = [{'mu' : [],'V': [], 'dV': [], 'F': [], 'dF': []}
-                                                  for _ in range(sum_k.n_inequiv_shells)]
+        with HDFArchive(archive, 'a') as ar:
+            if 'broyler' not in ar['DMFT_results']:
+                ar['DMFT_results']['broyler'] = [{'mu' : [],'V': [], 'dV': [], 'F': [], 'dF': []}
+                                                      for _ in range(sum_k.n_inequiv_shells)]
 
     # Generates a rotation matrix to change the basis
     if general_params['set_rot'] is not None:
@@ -398,7 +400,8 @@ def dmft_cycle(general_params, solver_params, advanced_params, dft_params,
         sum_k = _calculate_rotation_matrix(general_params, sum_k)
     # Saves rotation matrix to h5 archive:
     if mpi.is_master_node() and iteration_offset == 0:
-        archive['DMFT_input']['rot_mat'] = sum_k.rot_mat
+        with HDFArchive(archive, 'a') as ar:
+            ar['DMFT_input']['rot_mat'] = sum_k.rot_mat
     mpi.barrier()
 
     # Calculates density in default block structure
@@ -413,7 +416,8 @@ def dmft_cycle(general_params, solver_params, advanced_params, dft_params,
     det_blocks = None
     # load previous block_structure if possible
     if mpi.is_master_node():
-        det_blocks = 'block_structure' not in archive['DMFT_input']
+        with HDFArchive(archive, 'a') as ar:
+            det_blocks = 'block_structure' not in ar['DMFT_input']
     det_blocks = mpi.bcast(det_blocks)
 
     # Previous rot_mat only not None if the rot_mat changed from load_sigma or previous run
@@ -449,16 +453,17 @@ def dmft_cycle(general_params, solver_params, advanced_params, dft_params,
     else:
         # Master node checks if rot_mat stayed the same
         if mpi.is_master_node():
-            sum_k.block_structure = archive['DMFT_input']['block_structure']
-            sum_k.deg_shells = archive['DMFT_input/deg_shells']
-            previous_rot_mat = archive['DMFT_input']['rot_mat']
-            if not all(np.allclose(x, y) for x, y in zip(sum_k.rot_mat, previous_rot_mat)):
-                print('WARNING: rot_mat in current step is different from previous step.')
-                archive['DMFT_input']['rot_mat'] = sum_k.rot_mat
-            else:
-                previous_rot_mat = None
-            if 'solver_struct_ftps' in archive['DMFT_input']:
-                deg_orbs_ftps = archive['DMFT_input/solver_struct_ftps']
+            with HDFArchive(archive, 'a') as ar:
+                sum_k.block_structure = ar['DMFT_input']['block_structure']
+                sum_k.deg_shells = ar['DMFT_input/deg_shells']
+                previous_rot_mat = ar['DMFT_input']['rot_mat']
+                if not all(np.allclose(x, y) for x, y in zip(sum_k.rot_mat, previous_rot_mat)):
+                    print('WARNING: rot_mat in current step is different from previous step.')
+                    ar['DMFT_input']['rot_mat'] = sum_k.rot_mat
+                else:
+                    previous_rot_mat = None
+                if 'solver_struct_ftps' in ar['DMFT_input']:
+                    deg_orbs_ftps = ar['DMFT_input/solver_struct_ftps']
 
         sum_k.block_structure = mpi.bcast(sum_k.block_structure)
         sum_k.deg_shells = mpi.bcast(sum_k.deg_shells)
@@ -469,7 +474,8 @@ def dmft_cycle(general_params, solver_params, advanced_params, dft_params,
     # Sumk doesn't hold corr_to_inequiv anymore, which is in block_structure now
     if sum_k.block_structure.corr_to_inequiv is None:
         if mpi.is_master_node():
-            sum_k.block_structure.corr_to_inequiv = archive['dft_input/corr_to_inequiv']
+            with HDFArchive(archive, 'r') as ar:
+                sum_k.block_structure.corr_to_inequiv = ar['dft_input/corr_to_inequiv']
         sum_k.block_structure = mpi.bcast(sum_k.block_structure)
 
     # Determination of shell_multiplicity
@@ -486,21 +492,23 @@ def dmft_cycle(general_params, solver_params, advanced_params, dft_params,
     # Constructs interaction Hamiltonian and writes it to the h5 archive
     h_int, gw_params = interaction_hamiltonian.construct(sum_k, general_params, solver_type_per_imp, gw_params)
     if mpi.is_master_node():
-        archive['DMFT_input']['h_int'] = h_int
+        with HDFArchive(archive, 'a') as ar:
+            ar['DMFT_input']['h_int'] = h_int
 
     # If new calculation, writes input parameters and sum_k <-> solver mapping to archive
     if iteration_offset == 0:
         if mpi.is_master_node():
-            archive['DMFT_input']['general_params'] = dict_to_h5.prep_params_for_h5(general_params)
-            archive['DMFT_input']['solver_params'] = dict_to_h5.prep_params_for_h5(solver_params)
-            archive['DMFT_input']['dft_params'] = dict_to_h5.prep_params_for_h5(dft_params)
-            archive['DMFT_input']['advanced_params'] = dict_to_h5.prep_params_for_h5(advanced_params)
+            with HDFArchive(archive, 'a') as ar:
+                ar['DMFT_input']['general_params'] = dict_to_h5.prep_params_for_h5(general_params)
+                ar['DMFT_input']['solver_params'] = dict_to_h5.prep_params_for_h5(solver_params)
+                ar['DMFT_input']['dft_params'] = dict_to_h5.prep_params_for_h5(dft_params)
+                ar['DMFT_input']['advanced_params'] = dict_to_h5.prep_params_for_h5(advanced_params)
 
-            archive['DMFT_input']['block_structure'] = sum_k.block_structure
-            archive['DMFT_input']['deg_shells'] = sum_k.deg_shells
-            archive['DMFT_input']['shell_multiplicity'] = shell_multiplicity
-            if deg_orbs_ftps is not None:
-                archive['DMFT_input']['solver_struct_ftps'] = deg_orbs_ftps
+                ar['DMFT_input']['block_structure'] = sum_k.block_structure
+                ar['DMFT_input']['deg_shells'] = sum_k.deg_shells
+                ar['DMFT_input']['shell_multiplicity'] = shell_multiplicity
+                if deg_orbs_ftps is not None:
+                    ar['DMFT_input']['solver_struct_ftps'] = deg_orbs_ftps
     mpi.barrier()
 
     solvers = [None] * sum_k.n_inequiv_shells
@@ -520,14 +528,15 @@ def dmft_cycle(general_params, solver_params, advanced_params, dft_params,
 
     # store solver hash to archive
     if mpi.is_master_node():
-        if 'version' not in archive['DMFT_input']:
-            archive['DMFT_input'].create_group('version')
-        for iineq, solver in enumerate(solvers):
-            if f'solver {iineq}' not in archive['DMFT_input']['version']:
-                archive['DMFT_input']['version'].create_group(f'solver {iineq}')
-            archive['DMFT_input']['version'][f'solver {iineq}']['name'] = solver.solver_params['type']
-            archive['DMFT_input']['version'][f'solver {iineq}']['hash'] = solver.git_hash
-            archive['DMFT_input']['version'][f'solver {iineq}']['version'] = solver.version
+        with HDFArchive(archive, 'a') as ar:
+            if 'version' not in ar['DMFT_input']:
+                ar['DMFT_input'].create_group('version')
+            for iineq, solver in enumerate(solvers):
+                if f'solver {iineq}' not in ar['DMFT_input']['version']:
+                    ar['DMFT_input']['version'].create_group(f'solver {iineq}')
+                ar['DMFT_input']['version'][f'solver {iineq}']['name'] = solver.solver_params['type']
+                ar['DMFT_input']['version'][f'solver {iineq}']['hash'] = solver.git_hash
+                ar['DMFT_input']['version'][f'solver {iineq}']['version'] = solver.version
 
     # Extracts local GF per *inequivalent* shell
     local_gf_dft = sum_k.extract_G_loc(broadening=broadening, with_Sigma=False, mu=dft_mu)
@@ -546,21 +555,19 @@ def dmft_cycle(general_params, solver_params, advanced_params, dft_params,
     mpi.report('\n {} DMFT cycles requested. Starting with iteration  {}.\n'.format(n_iter, iteration_offset+1))
 
     # Prepares observable and conv dicts
-    observables = None
-    conv_obs = None
     if mpi.is_master_node():
         observables = prep_observables(archive, sum_k)
         conv_obs = convergence.prep_conv_obs(archive)
-    observables = mpi.bcast(observables)
-    conv_obs = mpi.bcast(conv_obs)
-
-    if mpi.is_master_node() and iteration_offset == 0:
-        write_header_to_file(general_params, sum_k)
-        observables = add_dft_values_as_zeroth_iteration(observables, general_params, solver_type_per_imp, dft_mu, dft_energy, sum_k,
-                                                         local_gf_dft, shell_multiplicity)
-        write_obs(observables, sum_k, general_params)
-        # write convergence file
-        convergence.prep_conv_file(general_params, sum_k)
+        if iteration_offset == 0:
+            write_header_to_file(general_params, sum_k)
+            observables = add_dft_values_as_zeroth_iteration(observables, general_params, solver_type_per_imp, dft_mu, dft_energy, sum_k,
+                                                             local_gf_dft, shell_multiplicity)
+            write_obs(observables, sum_k, general_params)
+            # write convergence file
+            convergence.prep_conv_file(general_params, sum_k)
+    else:
+        observables = None
+        conv_obs = None
 
     # The infamous DMFT self consistency cycle
     is_converged = False
@@ -581,6 +588,7 @@ def dmft_cycle(general_params, solver_params, advanced_params, dft_params,
                                                  h_int, archive, shell_multiplicity, E_kin_dft,
                                                  observables, conv_obs, ops_chi_measure, dft_irred_kpt_indices, dft_energy, broadening,
                                                  is_converged, is_sampling=False)
+        gc.collect()
 
         if is_converged:
             break
@@ -611,10 +619,6 @@ def dmft_cycle(general_params, solver_params, advanced_params, dft_params,
 
     mpi.barrier()
 
-    # close the h5 archive
-    if mpi.is_master_node():
-        del archive
-
     return is_converged, sum_k
 
 
@@ -634,8 +638,6 @@ def _dmft_step(sum_k, solvers, it, general_params, solver_params, gw_params,
     density_mat_unsym = [None] * sum_k.n_inequiv_shells
     density_shell_pre = np.zeros(sum_k.n_inequiv_shells)
     density_mat_pre = [None] * sum_k.n_inequiv_shells
-
-    mpi.barrier()
 
     if sum_k.SO:
         printed = ((np.real, 'real'), (np.imag, 'imaginary'))
@@ -716,18 +718,18 @@ def _dmft_step(sum_k, solvers, it, general_params, solver_params, gw_params,
                                 Hloc_0 += spin_block[o1,o2].real/2 * (c_dag(spin,o1) * c(spin,o2) + c_dag(spin,o2) * c(spin,o1))
                 solvers[icrsh].Hloc_0 = Hloc_0
 
-         # store solver to h5 archive
-        if general_params['store_solver'] and mpi.is_master_node():
-            if 'solver' not in archive['DMFT_input']:
-                archive['DMFT_input'].create_group('solver')
-            archive['DMFT_input/solver'].create_group('it_'+str(it))
-            archive['DMFT_input/solver/it_'+str(it)]['S_'+str(icrsh)] = solvers[icrsh].triqs_solver
-
         # store DMFT input directly in last_iter
         if mpi.is_master_node():
-            archive['DMFT_results/last_iter']['G0_freq_{}'.format(icrsh)] = solvers[icrsh].G0_freq
-            if solver_type_per_imp[icrsh] == 'cthyb' and solvers[icrsh].solver_params['delta_interface']:
-                archive['DMFT_results/last_iter']['Delta_time_{}'.format(icrsh)] = solvers[icrsh].Delta_time
+            with HDFArchive(archive, 'a') as ar:
+                ar['DMFT_results/last_iter']['G0_freq_{}'.format(icrsh)] = solvers[icrsh].G0_freq
+                if solver_type_per_imp[icrsh] == 'cthyb' and solvers[icrsh].solver_params['delta_interface']:
+                    ar['DMFT_results/last_iter']['Delta_time_{}'.format(icrsh)] = solvers[icrsh].Delta_time
+                # store solver to h5 archive
+                if general_params['store_solver']:
+                    if 'solver' not in ar['DMFT_input']:
+                        ar['DMFT_input'].create_group('solver')
+                    ar['DMFT_input/solver'].create_group('it_'+str(it))
+                    ar['DMFT_input/solver/it_'+str(it)]['S_'+str(icrsh)] = solvers[icrsh].triqs_solver
 
         # setup of measurement of chi(SzSz(tau) if requested
         # TODO: move this into solver class?
@@ -768,7 +770,8 @@ def _dmft_step(sum_k, solvers, it, general_params, solver_params, gw_params,
 
         # update solver in h5 archive
         if general_params['store_solver'] and mpi.is_master_node():
-            archive['DMFT_input/solver/it_'+str(it)]['S_'+str(icrsh)] = solvers[icrsh].triqs_solver
+            with HDFArchive(archive, 'a') as ar:
+                ar['DMFT_input/solver/it_'+str(it)]['S_'+str(icrsh)] = solvers[icrsh].triqs_solver
 
     # Done with loop over impurities
 
@@ -841,35 +844,35 @@ def _dmft_step(sum_k, solvers, it, general_params, solver_params, gw_params,
 
         write_obs(observables, sum_k, general_params)
 
-        # write the new observable array to h5 archive
-        archive['DMFT_results']['observables'] = observables
-
-    # Computes convergence quantities and writes them to file
-    if mpi.is_master_node():
+        # Computes convergence quantities and writes them to file
         conv_obs = convergence.calc_convergence_quantities(sum_k, general_params, conv_obs, observables,
                                                            solvers, G0_freq_previous, G_loc_all, Sigma_freq_previous)
         convergence.write_conv(conv_obs, sum_k, general_params)
-        archive['DMFT_results']['convergence_obs'] = conv_obs
-    conv_obs = mpi.bcast(conv_obs)
 
-    mpi.report('*** iteration finished ***')
+        with HDFArchive(archive, 'a') as ar:
+            ar['DMFT_results']['observables'] = observables
+            ar['DMFT_results']['convergence_obs'] = conv_obs
 
-    # Checks for convergence
-    is_now_converged = convergence.check_convergence(sum_k.n_inequiv_shells, general_params, conv_obs)
-    if is_now_converged is None:
-        is_converged = False
-    else:
-        # if convergency criteria was already reached don't overwrite it!
-        is_converged = is_converged or is_now_converged
+        mpi.report('*** iteration finished ***')
 
-    # Final prints
-    formatter.print_summary_observables(observables, sum_k.n_inequiv_shells,
-                                        sum_k.spin_block_names[sum_k.SO])
-    if general_params['calc_energies']:
-        formatter.print_summary_energetics(observables)
-    if general_params['magnetic'] and sum_k.SO == 0:
-        # if a magnetic calculation is done print out a summary of up/down occ
-        formatter.print_summary_magnetic_occ(observables, sum_k.n_inequiv_shells)
-    formatter.print_summary_convergence(conv_obs, general_params, sum_k.n_inequiv_shells)
+        # Checks for convergence
+        is_now_converged = convergence.check_convergence(sum_k.n_inequiv_shells, general_params, conv_obs)
+        if is_now_converged is None:
+            is_converged = False
+        else:
+            # if convergency criteria was already reached don't overwrite it!
+            is_converged = is_converged or is_now_converged
+
+        # Final prints
+        formatter.print_summary_observables(observables, sum_k.n_inequiv_shells,
+                                            sum_k.spin_block_names[sum_k.SO])
+        if general_params['calc_energies']:
+            formatter.print_summary_energetics(observables)
+        if general_params['magnetic'] and sum_k.SO == 0:
+            # if a magnetic calculation is done print out a summary of up/down occ
+            formatter.print_summary_magnetic_occ(observables, sum_k.n_inequiv_shells)
+        formatter.print_summary_convergence(conv_obs, general_params, sum_k.n_inequiv_shells)
+
+    mpi.bcast(is_converged)
 
     return sum_k, solvers, observables, is_converged
