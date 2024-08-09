@@ -27,19 +27,7 @@ import numpy as np
 from itertools import product
 
 from triqs.gf import MeshImTime, MeshReTime, MeshDLRImFreq, MeshReFreq, MeshLegendre, Gf, BlockGf, make_gf_imfreq, make_hermitian, Omega, iOmega_n, make_gf_from_fourier, make_gf_dlr, fit_gf_dlr, make_gf_dlr_imtime, make_gf_imtime
-from triqs.gf.tools import inverse, make_zero_tail
-from triqs.gf.descriptors import Fourier
 from triqs.operators import c_dag, c, Operator, util
-from triqs.operators.util.U_matrix import reduce_4index_to_2index
-from triqs.operators.util.extractors import block_matrix_from_op
-import triqs.utility.mpi as mpi
-import itertools
-from h5 import HDFArchive
-
-from solid_dmft.io_tools.dict_to_h5 import prep_params_for_h5
-
-from solid_dmft.dmft_tools import legendre_filter
-from solid_dmft.dmft_tools.matheval import MathExpr
 
 # import abc
 from abc import ABC, abstractmethod
@@ -197,33 +185,6 @@ class AbstractDMFTSolver(ABC):
 
 
     
-
-    # useful functions
-    @staticmethod
-    def get_n_orbitals(sum_k):
-        """
-        determines the number of orbitals within the
-        solver block structure.
-
-        Parameters
-        ----------
-        sum_k : dft_tools sumk object
-
-        Returns
-        -------
-        n_orb : dict of int
-            number of orbitals for up / down as dict for SOC calculation
-            without up / down block up holds the number of orbitals
-        """
-        n_orbitals = [{'up': 0, 'down': 0} for i in range(sum_k.n_inequiv_shells)]
-        for icrsh in range(sum_k.n_inequiv_shells):
-            for block, n_orb in sum_k.gf_struct_solver[icrsh].items():
-                if 'down' in block:
-                    n_orbitals[icrsh]['down'] += sum_k.gf_struct_solver[icrsh][block]
-                else:
-                    n_orbitals[icrsh]['up'] += sum_k.gf_struct_solver[icrsh][block]
-
-        return n_orbitals
 
     @staticmethod
     def _gf_fit_tail_fraction(Gf, fraction=0.4, replace=None, known_moments=[]):

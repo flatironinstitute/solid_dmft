@@ -5,11 +5,8 @@ from itertools import product
 from triqs.gf import MeshImTime, MeshReTime, MeshDLRImFreq, MeshReFreq, MeshLegendre, Gf, BlockGf, make_gf_imfreq, make_hermitian, Omega, iOmega_n, make_gf_from_fourier, make_gf_dlr, fit_gf_dlr, make_gf_dlr_imtime, make_gf_imtime
 from triqs.gf.tools import inverse, make_zero_tail
 from triqs.gf.descriptors import Fourier
-from triqs.operators import c_dag, c, Operator, util
 from triqs.operators.util.U_matrix import reduce_4index_to_2index
-from triqs.operators.util.extractors import block_matrix_from_op
 import triqs.utility.mpi as mpi
-import itertools
 from h5 import HDFArchive
 
 from solid_dmft.io_tools.dict_to_h5 import prep_params_for_h5
@@ -18,8 +15,9 @@ from solid_dmft.dmft_tools import legendre_filter
 from solid_dmft.dmft_tools.matheval import MathExpr
 
 
-# circular import of the abstract class
+#  import of the abstract class
 from solid_dmft.dmft_tools.solvers.abstractdmftsolver import AbstractDMFTSolver
+from solid_dmft.dmft_tools import common
 
 
 # import triqs solver
@@ -198,7 +196,7 @@ class CTSEGInterface(AbstractDMFTSolver):
             # get density density U tensor from solver
             U_dict = extract_U_dict2(self.h_int)
             # print("sum_k is" + self.sum_k.__repr__())
-            norb = self.get_n_orbitals(self.sum_k)
+            norb = common.get_n_orbitals(self.sum_k)
             norb = norb[self.icrsh]['up']
             U_dd = dict_to_matrix(U_dict, gf_struct=self.sum_k.gf_struct_solver_list[self.icrsh])
             # extract Uijij and Uijji terms

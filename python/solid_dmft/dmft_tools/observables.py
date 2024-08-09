@@ -34,7 +34,7 @@ import triqs.utility.mpi as mpi
 from triqs.gf import Gf, MeshImTime
 from triqs.atom_diag import trace_rho_op
 from triqs.gf.descriptors import Fourier
-from solid_dmft.dmft_tools import solver
+from solid_dmft.dmft_tools import common
 
 def prep_observables(h5_archive, sum_k):
     """
@@ -91,7 +91,7 @@ def _generate_header(general_params, sum_k):
     Generates the headers that are used in write_header_to_file.
     Returns a dict with {file_name: header_string}
     """
-    n_orb = solver.get_n_orbitals(sum_k)
+    n_orb = common.get_n_orbitals(sum_k)
 
     header_energy_mask = ' | {:>10} | {:>10}   {:>10}   {:>10}   {:>10}'
     header_energy = header_energy_mask.format('E_tot', 'E_DFT', 'E_bandcorr', 'E_int_imp', 'E_DC')
@@ -414,7 +414,7 @@ def write_obs(observables, sum_k, general_params):
 
     """
 
-    n_orb = solver.get_n_orbitals(sum_k)
+    n_orb = common.get_n_orbitals(sum_k)
 
     for icrsh in range(sum_k.n_inequiv_shells):
         if general_params['magnetic'] and sum_k.SO == 0:
