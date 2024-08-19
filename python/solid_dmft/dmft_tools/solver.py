@@ -62,9 +62,11 @@ if check_solver:
     from solid_dmft.dmft_tools.solvers.ftps_interface import FTPSInterface
     interfaces_dict['ftps'] = FTPSInterface
 
+
 # generic dispatch function for the solver classes
 def create_solver(general_params, solver_params, sum_k, icrsh, h_int, iteration_offset,
                     deg_orbs_ftps, gw_params=None, advanced_params=None):
+
         '''
         Dispatch the solver to the correct subclass
 
