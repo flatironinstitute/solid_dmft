@@ -37,7 +37,7 @@ from h5 import HDFArchive
 import triqs.utility.mpi as mpi
 from triqs.gf import make_gf_imfreq
 from triqs.operators import util, n, c, c_dag, Operator
-from solid_dmft.dmft_tools import solver
+from solid_dmft.dmft_tools import common
 
 
 try:
@@ -67,7 +67,7 @@ def _load_crpa_interaction_matrix(sum_k, general_params, gw_params, filename='UI
         first_index_shell = 0
         for ish in range(sum_k.n_corr_shells):
             icrsh = sum_k.corr_to_inequiv[ish]
-            n_orb = solver.get_n_orbitals(sum_k)[icrsh]['up']
+            n_orb = common.get_n_orbitals(sum_k)[icrsh]['up']
             u_matrix_temp = u_matrix_four_indices[first_index_shell:first_index_shell+n_orb,
                                                   first_index_shell:first_index_shell+n_orb,
                                                   first_index_shell:first_index_shell+n_orb,
@@ -186,7 +186,7 @@ def _construct_kanamori(sum_k, general_params, solver_type_per_imp, icrsh, den_d
     from the parameters U and J.
     """
 
-    n_orb = solver.get_n_orbitals(sum_k)[icrsh]['up']
+    n_orb = common.get_n_orbitals(sum_k)[icrsh]['up']
     if sum_k.SO == 1:
         assert n_orb % 2 == 0
         n_orb = n_orb // 2
@@ -331,7 +331,7 @@ def _construct_dynamic(sum_k, general_params, icrsh):
             U_onsite = ar['dynamic_U']['U_scr']
     U_onsite = mpi.bcast(U_onsite)
 
-    n_orb = solver.get_n_orbitals(sum_k)[icrsh]['up']
+    n_orb = common.get_n_orbitals(sum_k)[icrsh]['up']
     if sum_k.SO == 1:
         raise ValueError('dynamic U not implemented for SO!=0')
     if n_orb > 1:
@@ -353,7 +353,7 @@ def _generate_four_index_u_matrix(sum_k, general_params, icrsh):
 
     # ish points to the shell representative of the current group
     ish = sum_k.inequiv_to_corr[icrsh]
-    n_orb = solver.get_n_orbitals(sum_k)[icrsh]['up']
+    n_orb = common.get_n_orbitals(sum_k)[icrsh]['up']
     if sum_k.SO == 1:
         assert n_orb % 2 == 0
         n_orb = n_orb // 2
@@ -426,7 +426,7 @@ def _construct_density_density(sum_k, general_params, Umat_full_rotated, icrsh):
     """
 
     # Constructs Hamiltonian from Umat_full_rotated
-    n_orb = solver.get_n_orbitals(sum_k)[icrsh]['up']
+    n_orb = common.get_n_orbitals(sum_k)[icrsh]['up']
 
     Umat, Upmat = util.reduce_4index_to_2index(Umat_full_rotated)
     h_int = util.h_int_density(sum_k.spin_block_names[sum_k.SO], n_orb,
@@ -442,7 +442,7 @@ def _construct_slater(sum_k, general_params, Umat_full_rotated, icrsh):
     matrix.
     """
 
-    n_orb = solver.get_n_orbitals(sum_k)[icrsh]['up']
+    n_orb = common.get_n_orbitals(sum_k)[icrsh]['up']
 
     h_int = util.h_int_slater(sum_k.spin_block_names[sum_k.SO], n_orb,
                               map_operator_structure=sum_k.sumk_to_solver[icrsh],
@@ -589,7 +589,7 @@ def construct(sum_k, general_params, solver_type_per_imp,  gw_params=None):
 
         if general_params['h_int_type'][icrsh] == 'simple_intra':
             h_int[icrsh] = h_int_simple_intra(sum_k.spin_block_names[sum_k.SO],
-                                              solver.get_n_orbitals(sum_k)[icrsh]['up'],
+                                              common.get_n_orbitals(sum_k)[icrsh]['up'],
                                               map_operator_structure=sum_k.sumk_to_solver[icrsh],
                                               U=general_params['U'][icrsh],
                                               H_dump=os.path.join(general_params['jobname'], f'H_imp{icrsh}.txt'))
