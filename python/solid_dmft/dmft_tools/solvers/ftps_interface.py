@@ -1,8 +1,7 @@
-
 import numpy as np
 from itertools import product
 
-from triqs.gf import MeshReTime, Gf,Omega
+from triqs.gf import MeshReTime, Gf, Omega
 from triqs.gf.tools import inverse
 import triqs.utility.mpi as mpi
 from h5 import HDFArchive
@@ -17,15 +16,13 @@ from forktps.DiscreteBath import SigmaDyson, DiscretizeBath, TimeStepEstimation
 from forktps.BathFitting import BathFitter
 from forktps.Helpers import MakeGFstruct
 
+
 class FTPSInterface(AbstractDMFTSolver):
-
-    def __init__(self, general_params, solver_params, sum_k, icrsh, h_int, iteration_offset,
-            deg_orbs_ftps, gw_params=None, advanced_params=None):
-
+    def __init__(
+        self, general_params, solver_params, sum_k, icrsh, h_int, iteration_offset, deg_orbs_ftps, gw_params=None, advanced_params=None
+    ):
         # Call the base class constructor
-        super().__init__(general_params, solver_params, sum_k, icrsh, h_int, iteration_offset,
-            deg_orbs_ftps, gw_params, advanced_params)
-
+        super().__init__(general_params, solver_params, sum_k, icrsh, h_int, iteration_offset, deg_orbs_ftps, gw_params, advanced_params)
 
         # Create the  solver specifics
         self.bathfit_adjusted = self.iteration_offset != 0
@@ -58,55 +55,68 @@ class FTPSInterface(AbstractDMFTSolver):
         # convert self.deg_orbs_ftps to mapping and solver-friendly list
         if not self.sum_k.corr_shells[self.icrsh]['SO']:
             # mapping dictionary
-            self.calc_mapping = {self.deg_orbs_ftps[self.icrsh][deg_shell][0]:
-                    self.deg_orbs_ftps[self.icrsh][deg_shell][1:] for deg_shell in range(len(self.deg_orbs_ftps[self.icrsh]))}
+            self.calc_mapping = {
+                self.deg_orbs_ftps[self.icrsh][deg_shell][0]: self.deg_orbs_ftps[self.icrsh][deg_shell][1:]
+                for deg_shell in range(len(self.deg_orbs_ftps[self.icrsh]))
+            }
             # make solver-friendly list from mapping keys
             self.calc_me = [[item.split('_')[0], int(item.split('_')[1])] for item in self.calc_mapping.keys()]
             # replace 'down' with 'dn'
-            self.calc_me = [[item[0].replace('down','dn'),item[1]] for item in self.calc_me]
+            self.calc_me = [[item[0].replace('down', 'dn'), item[1]] for item in self.calc_me]
         else:
             # for SOC we just end up calculating everything for now
             # TODO: perhaps skip down channel
             self.calc_mapping = None
-            self.calc_me = [[f'ud_{i}',j] for i,j in product(range(2), range(3))]
+            self.calc_me = [[f'ud_{i}', j] for i, j in product(range(2), range(3))]
 
         # create solver
-        self.triqs_solver = ftps.Solver(gf_struct=self.gf_struct, nw=self.general_params['n_w'],
-                                   wmin=self.general_params['w_range'][0], wmax=self.general_params['w_range'][1])
-
+        self.triqs_solver = ftps.Solver(
+            gf_struct=self.gf_struct,
+            nw=self.general_params['n_w'],
+            wmin=self.general_params['w_range'][0],
+            wmax=self.general_params['w_range'][1],
+        )
 
         # create partSector params
         self.sector_params = ftps.solver.DMRGParams(maxmI=50, maxmIB=50, maxmB=50, tw=1e-10, nmax=5, sweeps=5)
 
         # for now prep_imagTevo, prep_method and nmax hard-coded
         # create DMRG params
-        self.dmrg_params = ftps.solver.DMRGParams(maxmI=self.solver_params['dmrg_maxmI'], maxmIB=self.solver_params['dmrg_maxmIB'],
-                                             maxmB=self.solver_params['dmrg_maxmB'], tw=self.solver_params['dmrg_tw'],
-                                             prep_imagTevo=True, prep_method='TEBD', sweeps=self.solver_params['sweeps'], nmax=2,
-                                             prep_time_steps=5, napph=2
-                                             )
+        self.dmrg_params = ftps.solver.DMRGParams(
+            maxmI=self.solver_params['dmrg_maxmI'],
+            maxmIB=self.solver_params['dmrg_maxmIB'],
+            maxmB=self.solver_params['dmrg_maxmB'],
+            tw=self.solver_params['dmrg_tw'],
+            prep_imagTevo=True,
+            prep_method='TEBD',
+            sweeps=self.solver_params['sweeps'],
+            nmax=2,
+            prep_time_steps=5,
+            napph=2,
+        )
 
         # create TEVO params
-        self.tevo_params = ftps.solver.TevoParams(dt=self.solver_params['dt'], time_steps=1, #dummy, will be updated during the run
-                                             maxmI=self.solver_params['maxmI'], maxmIB=self.solver_params['maxmIB'],
-                                             maxmB=self.solver_params['maxmB'], tw=self.solver_params['tw'])
+        self.tevo_params = ftps.solver.TevoParams(
+            dt=self.solver_params['dt'],
+            time_steps=1,  # dummy, will be updated during the run
+            maxmI=self.solver_params['maxmI'],
+            maxmIB=self.solver_params['maxmIB'],
+            maxmB=self.solver_params['maxmB'],
+            tw=self.solver_params['tw'],
+        )
 
         self.git_hash = forktps_hash
         self.version = version
 
         return
 
-
-
-
     def solve(self, **kwargs):
-
         def make_positive_definite(G):
             # ensure that Delta is positive definite
             for name, gf in G:
                 for orb, w in product(range(gf.target_shape[0]), gf.mesh):
-                    if gf[orb,orb][w].imag > 0.0:
-                        gf[orb,orb][w] = gf[orb,orb][w].real + 0.0j
+                    if gf[orb, orb][w].imag > 0.0:
+                        gf[orb, orb][w] = gf[orb, orb][w].real + 0.0j
             return G
 
         # create h_loc solver object
@@ -118,7 +128,9 @@ class FTPSInterface(AbstractDMFTSolver):
         for name, g0 in self.G0_freq:
             spin = name.split('_')[0] if not self.sum_k.corr_shells[self.icrsh]['SO'] else name
             ftps_name = self.convert_ftps[spin]
-            solver_eal = self.sum_k.block_structure.convert_matrix(sumk_eal, space_from='sumk', ish_from=self.sum_k.inequiv_to_corr[self.icrsh])[name]
+            solver_eal = self.sum_k.block_structure.convert_matrix(
+                sumk_eal, space_from='sumk', ish_from=self.sum_k.inequiv_to_corr[self.icrsh]
+            )[name]
             self.Delta_freq[name] << Omega + 1j * self.general_params['eta'] - inverse(g0) - solver_eal
             # solver Delta is symmetrized by just using 'up_0' channel
             self.Delta_freq_solver[ftps_name] << Omega + 1j * self.general_params['eta'] - inverse(g0) - solver_eal
@@ -127,7 +139,7 @@ class FTPSInterface(AbstractDMFTSolver):
         self.Delta_freq_solver = make_positive_definite(self.Delta_freq_solver)
 
         if self.general_params['store_solver'] and mpi.is_master_node():
-            archive = HDFArchive(self.general_params['jobname']+'/'+self.general_params['seedname']+'.h5', 'a')
+            archive = HDFArchive(self.general_params['jobname'] + '/' + self.general_params['seedname'] + '.h5', 'a')
             if not 'it_-1' in archive['DMFT_input/solver']:
                 archive['DMFT_input/solver'].create_group('it_-1')
             archive['DMFT_input/solver/it_-1']['Delta_orig'] = self.Delta_freq_solver
@@ -135,32 +147,45 @@ class FTPSInterface(AbstractDMFTSolver):
         # remove off-diagonal terms
         if self.solver_params['diag_delta']:
             for name, delta in self.Delta_freq_solver:
-                for i_orb, j_orb in product(range(delta.target_shape[0]),range(delta.target_shape[1])):
+                for i_orb, j_orb in product(range(delta.target_shape[0]), range(delta.target_shape[1])):
                     if i_orb != j_orb:
-                        delta[i_orb,j_orb] << 0.0 + 0.0j
+                        delta[i_orb, j_orb] << 0.0 + 0.0j
 
         # option to increase bath sites, but run with previous eta to get increased accuracy
         if self.solver_params['n_bath'] != 0 and self.solver_params['refine_factor'] != 1:
             if not self.bathfit_adjusted or self.bathfit_adjusted and self.iteration_offset > 0:
                 mpi.report('Rescaling "n_bath" with a factor of {}'.format(self.solver_params['refine_factor']))
-                self.solver_params['n_bath'] = int(self.solver_params['refine_factor']*self.solver_params['n_bath'])
+                self.solver_params['n_bath'] = int(self.solver_params['refine_factor'] * self.solver_params['n_bath'])
 
         if self.solver_params['bath_fit']:
-
             # bathfitter
             # FIXME: this is temporary, since off-diagonal Bathfitter is not yet integrated in FTPS
             if self.sum_k.corr_shells[self.icrsh]['SO']:
-                fitter = off_fitter.OffDiagBathFitter(Nb=self.solver_params['n_bath']) if (self.solver_params['refine_factor'] != 1 and self.solver_params['n_bath'] != 0) else off_fitter.OffDiagBathFitter(Nb=None)
-                Delta_discrete = fitter.FitBath(Delta=self.Delta_freq_solver, eta=self.general_params['eta'], ignoreWeight=self.solver_params['ignore_weight'],
-                                                SO=bool(self.sum_k.corr_shells[self.icrsh]['SO']))
+                fitter = (
+                    off_fitter.OffDiagBathFitter(Nb=self.solver_params['n_bath'])
+                    if (self.solver_params['refine_factor'] != 1 and self.solver_params['n_bath'] != 0)
+                    else off_fitter.OffDiagBathFitter(Nb=None)
+                )
+                Delta_discrete = fitter.FitBath(
+                    Delta=self.Delta_freq_solver,
+                    eta=self.general_params['eta'],
+                    ignoreWeight=self.solver_params['ignore_weight'],
+                    SO=bool(self.sum_k.corr_shells[self.icrsh]['SO']),
+                )
             else:
                 fitter = BathFitter(Nb=self.solver_params['n_bath']) if self.solver_params['n_bath'] != 0 else BathFitter(Nb=None)
-                Delta_discrete = fitter.FitBath(Delta=self.Delta_freq_solver, eta=self.general_params['eta'], ignoreWeight=self.solver_params['ignore_weight'])
+                Delta_discrete = fitter.FitBath(
+                    Delta=self.Delta_freq_solver, eta=self.general_params['eta'], ignoreWeight=self.solver_params['ignore_weight']
+                )
         else:
             # discretizebath
             gap_interval = self.solver_params['enforce_gap'] if self.solver_params['enforce_gap'] is not None else None
-            Delta_discrete = DiscretizeBath(Delta=self.Delta_freq_solver, Nb=self.solver_params['n_bath'], gap=gap_interval,
-                                            SO=bool(self.sum_k.corr_shells[self.icrsh]['SO']))
+            Delta_discrete = DiscretizeBath(
+                Delta=self.Delta_freq_solver,
+                Nb=self.solver_params['n_bath'],
+                gap=gap_interval,
+                SO=bool(self.sum_k.corr_shells[self.icrsh]['SO']),
+            )
 
         # should be done only once after the first iteration
         if self.solver_params['n_bath'] != 0 and self.solver_params['refine_factor'] != 1:
@@ -175,20 +200,26 @@ class FTPSInterface(AbstractDMFTSolver):
         self.triqs_solver.b = Delta_discrete
         # calculate time_steps
         time_steps = TimeStepEstimation(self.triqs_solver.b, eta=self.general_params['eta'], dt=self.solver_params['dt'])
-        mpi.report('TimeStepEstimation returned {} with given bath, "eta" = {} and "dt" = {}'.format(time_steps, self.general_params['eta'],
-                                                                                                        self.solver_params['dt']))
+        mpi.report(
+            'TimeStepEstimation returned {} with given bath, "eta" = {} and "dt" = {}'.format(
+                time_steps, self.general_params['eta'], self.solver_params['dt']
+            )
+        )
         # need to update tevo_params and G_time
         self.tevo_params.time_steps = time_steps
-        self.G_time = self.sum_k.block_structure.create_gf(ish=self.icrsh, gf_function=Gf, space='solver',
-                                                            mesh=MeshReTime(n_t=2*time_steps+1,
-                                                                            window=[0,2*time_steps*self.solver_params['dt']])
-                                                            )
-
+        self.G_time = self.sum_k.block_structure.create_gf(
+            ish=self.icrsh,
+            gf_function=Gf,
+            space='solver',
+            mesh=MeshReTime(n_t=2 * time_steps + 1, window=[0, 2 * time_steps * self.solver_params['dt']]),
+        )
 
         # fill Hloc FTPS object
         # get hloc_dft from effective atomic levels
         for name, gf in self.Delta_freq:
-            solver_eal = self.sum_k.block_structure.convert_matrix(sumk_eal, space_from='sumk', ish_from=self.sum_k.inequiv_to_corr[self.icrsh])[name]
+            solver_eal = self.sum_k.block_structure.convert_matrix(
+                sumk_eal, space_from='sumk', ish_from=self.sum_k.inequiv_to_corr[self.icrsh]
+            )[name]
             if not self.sum_k.corr_shells[self.icrsh]['SO']:
                 name = self.convert_ftps[name.split('_')[0]]
                 solver_eal = solver_eal.real
@@ -204,12 +235,12 @@ class FTPSInterface(AbstractDMFTSolver):
         # so for debugging it is done here again
         # store solver to h5 archive
         if self.general_params['store_solver'] and mpi.is_master_node():
-            with HDFArchive(self.general_params['jobname']+'/'+self.general_params['seedname']+'.h5', 'a') as archive:
+            with HDFArchive(self.general_params['jobname'] + '/' + self.general_params['seedname'] + '.h5', 'a') as archive:
                 if not 'it_-1' in archive['DMFT_input/solver']:
                     archive['DMFT_input/solver'].create_group('it_-1')
                 archive['DMFT_input/solver'].create_group('it_-1')
                 archive['DMFT_input/solver/it_-1']['Delta'] = self.Delta_freq_solver
-                archive['DMFT_input/solver/it_-1']['S_'+str(self.icrsh)] = self.triqs_solver
+                archive['DMFT_input/solver/it_-1']['S_' + str(self.icrsh)] = self.triqs_solver
 
         # Solve the impurity problem for icrsh shell
         # *************************************
@@ -218,15 +249,27 @@ class FTPSInterface(AbstractDMFTSolver):
         if self.path_to_gs_accepted:
             self.path_to_gs_accepted = False
         if path_to_gs != 'postprocess':
-            self.triqs_solver.solve(h_int=self.h_int, params_GS=self.dmrg_params, params_partSector=self.sector_params,
-                                    tevo=self.tevo_params, eta=self.general_params['eta'], calc_me = self.calc_me,
-                                    state_storage=self.solver_params['state_storage'],path_to_gs=path_to_gs)
+            self.triqs_solver.solve(
+                h_int=self.h_int,
+                params_GS=self.dmrg_params,
+                params_partSector=self.sector_params,
+                tevo=self.tevo_params,
+                eta=self.general_params['eta'],
+                calc_me=self.calc_me,
+                state_storage=self.solver_params['state_storage'],
+                path_to_gs=path_to_gs,
+            )
         else:
-            self.triqs_solver.post_process(h_int=self.h_int, params_GS=self.dmrg_params, params_partSector=self.dmrg_params,
-                                            tevo=self.tevo_params, eta=self.general_params['eta'], calc_me = self.calc_me,
-                                            state_storage=self.solver_params['state_storage'])
+            self.triqs_solver.post_process(
+                h_int=self.h_int,
+                params_GS=self.dmrg_params,
+                params_partSector=self.dmrg_params,
+                tevo=self.tevo_params,
+                eta=self.general_params['eta'],
+                calc_me=self.calc_me,
+                state_storage=self.solver_params['state_storage'],
+            )
             # *************************************
-
 
         # call postprocessing
         self.postprocess()
@@ -234,24 +277,26 @@ class FTPSInterface(AbstractDMFTSolver):
         return
 
     def postprocess(self):
-        r'''
+        r"""
         Organize G_freq, G_time, Sigma_freq and G_l from ftps solver
-        '''
+        """
 
         # symmetrization of reduced solver G
         def symmetrize_opt(G_in, soc):
             G = G_in.copy()
             if soc:
+
                 def swap_2():
                     for i in range(2):
-                        G['ud_1'][i,2] = -G['ud_1'][i,2]
-                        G['ud_1'][2,i] = -G['ud_1'][2,i]
+                        G['ud_1'][i, 2] = -G['ud_1'][i, 2]
+                        G['ud_1'][2, i] = -G['ud_1'][2, i]
+
                 swap_2()
-                G['ud_0'] = 0.5*(G['ud_0'] + G['ud_1'])
+                G['ud_0'] = 0.5 * (G['ud_0'] + G['ud_1'])
                 G['ud_1'] = G['ud_0']
-                for name , g in G:
-                    g[1,1] = 0.5*(g[1,1]+g[2,2])
-                    g[2,2] = g[1,1]
+                for name, g in G:
+                    g[1, 1] = 0.5 * (g[1, 1] + g[2, 2])
+                    g[2, 2] = g[1, 1]
                 swap_2()
             else:
                 switch = lambda spin: 'dn' if spin == 'down' else 'up'
@@ -260,12 +305,12 @@ class FTPSInterface(AbstractDMFTSolver):
                     for deg_item in mapto:
                         map_spin, map_block = deg_item.split('_')
                         mpi.report(f'mapping {spin}-{block} to {map_spin}-{map_block}...')
-                        G[switch(map_spin)].data[:,int(map_block),int(map_block)] = G[switch(spin)].data[:,int(block),int(block)]
+                        G[switch(map_spin)].data[:, int(map_block), int(map_block)] = G[switch(spin)].data[:, int(block), int(block)]
                 # particle-hole symmetry: enforce mirror/point symmetry of G(w)
                 if self.solver_params['ph_symm']:
                     for block, gf in G:
-                        gf.data.real = 0.5 * ( gf.data[::1].real - gf.data[::-1].real )
-                        gf.data.imag = 0.5 * ( gf.data[::1].imag + gf.data[::-1].imag )
+                        gf.data.real = 0.5 * (gf.data[::1].real - gf.data[::-1].real)
+                        gf.data.imag = 0.5 * (gf.data[::1].imag + gf.data[::-1].imag)
             return G
 
         def symmetrize(G):
@@ -275,8 +320,8 @@ class FTPSInterface(AbstractDMFTSolver):
             # ensure that Delta is positive definite
             for name, gf in G:
                 for orb, w in product(range(gf.target_shape[0]), gf.mesh):
-                    if gf[orb,orb][w].imag > 0.0:
-                        gf[orb,orb][w] = gf[orb,orb][w].real + 0.0j
+                    if gf[orb, orb][w].imag > 0.0:
+                        gf[orb, orb][w] = gf[orb, orb][w].real + 0.0j
             return G
 
         G_w = symmetrize(self.triqs_solver.G_w)
@@ -285,9 +330,14 @@ class FTPSInterface(AbstractDMFTSolver):
 
         # calculate Sigma_freq via Dyson
         # do not use Dyson equation directly, as G0 might have wrong eta
-        Sigma_w_symm = SigmaDyson(Gret=self.triqs_solver.G_ret, bath=self.triqs_solver.b,
-                                  hloc=self.triqs_solver.e0, mesh=self.Delta_freq_solver.mesh,
-                                  eta=self.general_params['eta'], symmG=symmetrize)
+        Sigma_w_symm = SigmaDyson(
+            Gret=self.triqs_solver.G_ret,
+            bath=self.triqs_solver.b,
+            hloc=self.triqs_solver.e0,
+            mesh=self.Delta_freq_solver.mesh,
+            eta=self.general_params['eta'],
+            symmG=symmetrize,
+        )
 
         # convert everything to solver objects
         for block, gf in G_w:
@@ -303,10 +353,4 @@ class FTPSInterface(AbstractDMFTSolver):
             self.G_time[sumk_name] << self.triqs_solver.G_ret[block]
 
         return
-
-
-
-
-
-
 

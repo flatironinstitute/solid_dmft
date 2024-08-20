@@ -1,4 +1,4 @@
-#%%
+# %%
 ################################################################################
 #
 # solid_dmft - A versatile python wrapper to perform DFT+DMFT calculations
@@ -34,10 +34,8 @@ from abc import ABC, abstractmethod
 # circular import of all the solver subclasses
 
 
-
-
 class AbstractDMFTSolver(ABC):
-    '''
+    """
     Abstract base class for DMFT solvers
 
     This class defines the template for solvers for solving the DMFT impurity problem for the icrsh impurity.
@@ -56,14 +54,15 @@ class AbstractDMFTSolver(ABC):
             interaction Hamiltonian of correlated shell
     iteration_offset: int
             number of iterations this run is based on
-    '''
+    """
+
     # ********************************************************************
     # General initialization common to all solvers
     # ********************************************************************
 
-    def __init__(self, general_params, solver_params, sum_k, icrsh, h_int, iteration_offset,
-                  deg_orbs_ftps, gw_params=None, advanced_params=None):
-
+    def __init__(
+        self, general_params, solver_params, sum_k, icrsh, h_int, iteration_offset, deg_orbs_ftps, gw_params=None, advanced_params=None
+    ):
         self.general_params = general_params
         self.solver_params = solver_params
         self.gw_params = gw_params
@@ -73,8 +72,6 @@ class AbstractDMFTSolver(ABC):
         self.h_int = h_int
         self.iteration_offset = iteration_offset
         self.deg_orbs_ftps = deg_orbs_ftps
-
-
 
         if self.solver_params.get('crm_dyson_solver'):
             self.G_time_dlr = None
@@ -90,20 +87,18 @@ class AbstractDMFTSolver(ABC):
         if self.solver_params.get('delta_interface'):
             self.Hloc_0 = Operator()
 
-
     # ********************************************************************
     # initialize Freq and Time objects
     # ********************************************************************
 
     def _init_ImFreq_objects(self):
-        r'''
+        r"""
         Initialize all ImFreq objects
-        '''
+        """
 
         # create all ImFreq instances
         self.n_iw = self.general_params['n_iw']
-        self.G_freq = self.sum_k.block_structure.create_gf(ish=self.icrsh, gf_function=Gf, space='solver',
-                                                           mesh=self.sum_k.mesh)
+        self.G_freq = self.sum_k.block_structure.create_gf(ish=self.icrsh, gf_function=Gf, space='solver', mesh=self.sum_k.mesh)
         # copy
         self.Sigma_freq = self.G_freq.copy()
         self.G0_freq = self.G_freq.copy()
@@ -112,36 +107,32 @@ class AbstractDMFTSolver(ABC):
 
         # create all ImTime instances
         self.n_tau = self.general_params['n_tau']
-        self.G_time = self.sum_k.block_structure.create_gf(ish=self.icrsh, gf_function=Gf, space='solver',
-                                                           mesh=MeshImTime(beta=self.sum_k.mesh.beta,
-                                                                           S='Fermion', n_tau=self.n_tau)
-                                                           )
+        self.G_time = self.sum_k.block_structure.create_gf(
+            ish=self.icrsh, gf_function=Gf, space='solver', mesh=MeshImTime(beta=self.sum_k.mesh.beta, S='Fermion', n_tau=self.n_tau)
+        )
         # copy
         self.Delta_time = self.G_time.copy()
 
         # create all Legendre instances
-        if (self.solver_params.get('measure_G_l') or self.solver_params.get('legendre_fit')):
+        if self.solver_params.get('measure_G_l') or self.solver_params.get('legendre_fit'):
             self.n_l = self.solver_params['n_l']
-            self.G_l = self.sum_k.block_structure.create_gf(ish=self.icrsh, gf_function=Gf, space='solver',
-                                                            mesh=MeshLegendre(beta=self.general_params['beta'],
-                                                                              max_n=self.n_l, S='Fermion')
-                                                            )
+            self.G_l = self.sum_k.block_structure.create_gf(
+                ish=self.icrsh,
+                gf_function=Gf,
+                space='solver',
+                mesh=MeshLegendre(beta=self.general_params['beta'], max_n=self.n_l, S='Fermion'),
+            )
             # move original G_freq to G_freq_orig
             self.G_time_orig = self.G_time.copy()
 
-
-
-
-
     def _init_ReFreq_objects(self):
-        r'''
+        r"""
         Initialize all ReFreq objects
-        '''
+        """
 
         # create all ReFreq instances
         self.n_w = self.general_params['n_w']
-        self.G_freq = self.sum_k.block_structure.create_gf(ish=self.icrsh, gf_function=Gf, space='solver',
-                                                           mesh=self.sum_k.mesh)
+        self.G_freq = self.sum_k.block_structure.create_gf(ish=self.icrsh, gf_function=Gf, space='solver', mesh=self.sum_k.mesh)
         # copy
         self.Sigma_freq = self.G_freq.copy()
         self.G0_freq = self.G_freq.copy()
@@ -150,40 +141,37 @@ class AbstractDMFTSolver(ABC):
 
         # create another Delta_freq for the solver, which uses different spin indices
         n_orb = self.sum_k.corr_shells[self.icrsh]['dim']
-        n_orb = n_orb//2 if self.sum_k.corr_shells[self.icrsh]['SO'] else n_orb
-        gf = Gf(target_shape = (n_orb, n_orb), mesh=MeshReFreq(n_w=self.n_w, window=self.general_params['w_range']))
+        n_orb = n_orb // 2 if self.sum_k.corr_shells[self.icrsh]['SO'] else n_orb
+        gf = Gf(target_shape=(n_orb, n_orb), mesh=MeshReFreq(n_w=self.n_w, window=self.general_params['w_range']))
 
-        self.Delta_freq_solver = BlockGf(name_list =tuple([block[0] for block in self.gf_struct]), block_list = (gf, gf), make_copies = True)
+        self.Delta_freq_solver = BlockGf(name_list=tuple([block[0] for block in self.gf_struct]), block_list=(gf, gf), make_copies=True)
 
         # create all ReTime instances
         # FIXME: dummy G_time, since time_steps will be recalculated during run
-        #time_steps = int(2 * self.solver_params['time_steps'] * self.solver_params['refine_factor']) if self.solver_params['n_bath'] != 0 else int(2 * self.solver_params['time_steps'])
+        # time_steps = int(2 * self.solver_params['time_steps'] * self.solver_params['refine_factor']) if self.solver_params['n_bath'] != 0 else int(2 * self.solver_params['time_steps'])
         time_steps = int(2 * 1 * self.solver_params['refine_factor']) if self.solver_params['n_bath'] != 0 else int(2 * 1)
-        self.G_time = self.sum_k.block_structure.create_gf(ish=self.icrsh, gf_function=Gf, space='solver',
-                                                           mesh=MeshReTime(n_t=time_steps+1,
-                                                           window=[0,time_steps*self.solver_params['dt']])
-                                                           )
-
-
+        self.G_time = self.sum_k.block_structure.create_gf(
+            ish=self.icrsh,
+            gf_function=Gf,
+            space='solver',
+            mesh=MeshReTime(n_t=time_steps + 1, window=[0, time_steps * self.solver_params['dt']]),
+        )
 
     # define abstract solve and postprocess methods
 
     @abstractmethod
     def solve(self, **kwargs):
-        r'''
+        r"""
         Solve the DMFT impurity problem
-        '''
+        """
         pass
 
     @abstractmethod
     def postprocess(self):
-        r'''
+        r"""
         Postprocess the DMFT impurity problem
-        '''
+        """
         pass
-
-
-
 
     @staticmethod
     def _gf_fit_tail_fraction(Gf, fraction=0.4, replace=None, known_moments=[]):
@@ -221,18 +209,15 @@ class AbstractDMFTSolver(ABC):
                 tail = Gf_fit[bl].fit_hermitian_tail()
             else:
                 tail = Gf_fit[bl].fit_hermitian_tail(known_moments[i])
-            nmax_frac = int(len(Gf_fit[bl].mesh)/2 * (1-replace))
-            Gf_fit[bl].replace_by_tail(tail[0],n_min=nmax_frac)
+            nmax_frac = int(len(Gf_fit[bl].mesh) / 2 * (1 - replace))
+            Gf_fit[bl].replace_by_tail(tail[0], n_min=nmax_frac)
 
         return Gf_fit
 
     @staticmethod
     def _fit_tail_window(
-            Sigma_iw,
-            fit_min_n=None, fit_max_n=None,
-            fit_min_w=None, fit_max_w=None,
-            fit_max_moment=None, fit_known_moments=None
-            ):
+        Sigma_iw, fit_min_n=None, fit_max_n=None, fit_min_w=None, fit_max_w=None, fit_max_moment=None, fit_known_moments=None
+    ):
         """
         Fit a high frequency 1/(iw)^n expansion of Sigma_iw
         and replace the high frequency part with the fitted high frequency expansion.
@@ -266,13 +251,13 @@ class AbstractDMFTSolver(ABC):
 
         # Define default tail quantities
         if fit_min_w is not None:
-            fit_min_n = int(0.5*(fit_min_w*Sigma_iw.mesh.beta/np.pi - 1.0))
+            fit_min_n = int(0.5 * (fit_min_w * Sigma_iw.mesh.beta / np.pi - 1.0))
         if fit_max_w is not None:
-            fit_max_n = int(0.5*(fit_max_w*Sigma_iw.mesh.beta/np.pi - 1.0))
+            fit_max_n = int(0.5 * (fit_max_w * Sigma_iw.mesh.beta / np.pi - 1.0))
         if fit_min_n is None:
-            fit_min_n = int(0.8*len(Sigma_iw.mesh)/2)
+            fit_min_n = int(0.8 * len(Sigma_iw.mesh) / 2)
         if fit_max_n is None:
-            fit_max_n = int(len(Sigma_iw.mesh)/2)
+            fit_max_n = int(len(Sigma_iw.mesh) / 2)
         if fit_max_moment is None:
             fit_max_moment = 3
 
@@ -280,35 +265,30 @@ class AbstractDMFTSolver(ABC):
             fit_known_moments = {}
             for name, sig in Sigma_iw:
                 shape = [0] + list(sig.target_shape)
-                fit_known_moments[name] = np.zeros(shape, dtype=complex) # no known moments
+                fit_known_moments[name] = np.zeros(shape, dtype=complex)  # no known moments
 
         # Now fit the tails of Sigma_iw and replace the high frequency part with the tail expansion
         tail_barr = {}
         Sigma_fit = Sigma_iw.copy()
         for name, sig in Sigma_fit:
-
             tail, err = fit_hermitian_tail_on_window(
                 sig,
-                n_min = fit_min_n,
-                n_max = fit_max_n,
-                known_moments = fit_known_moments[name],
+                n_min=fit_min_n,
+                n_max=fit_max_n,
+                known_moments=fit_known_moments[name],
                 # set max number of pts used in fit larger than mesh size, to use all data in fit
-                n_tail_max = 10 * len(sig.mesh),
-                expansion_order = fit_max_moment
-                )
+                n_tail_max=10 * len(sig.mesh),
+                expansion_order=fit_max_moment,
+            )
             tail_barr[name] = tail
             replace_by_tail(sig, tail, n_min=fit_min_n)
 
         return Sigma_fit, tail_barr
 
-
     def _make_spin_equal(self, Sigma):
-
         # if not SOC than average up and down
         if not self.general_params['magnetic'] and not self.sum_k.SO == 1:
-            Sigma['up_0'] = 0.5*(Sigma['up_0'] + Sigma['down_0'])
+            Sigma['up_0'] = 0.5 * (Sigma['up_0'] + Sigma['down_0'])
             Sigma['down_0'] = Sigma['up_0']
 
         return Sigma
-
-

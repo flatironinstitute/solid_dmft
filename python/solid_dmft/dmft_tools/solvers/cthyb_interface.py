@@ -1,6 +1,5 @@
-
 import numpy as np
-from triqs.gf import MeshDLRImFreq, Gf, make_gf_imfreq, make_hermitian,fit_gf_dlr, make_gf_dlr_imtime
+from triqs.gf import MeshDLRImFreq, Gf, make_gf_imfreq, make_hermitian, fit_gf_dlr, make_gf_dlr_imtime
 from triqs.gf.tools import inverse
 import triqs.utility.mpi as mpi
 from h5 import HDFArchive
@@ -18,17 +17,13 @@ from solid_dmft.dmft_tools.solvers.abstractdmftsolver import AbstractDMFTSolver
 from triqs_cthyb.solver import Solver as cthyb_solver
 from triqs_cthyb.version import triqs_cthyb_hash, version
 
+
 class CTHYBInterface(AbstractDMFTSolver):
-
-    def __init__(self, general_params, solver_params, sum_k, icrsh, h_int, iteration_offset,
-            deg_orbs_ftps, gw_params=None, advanced_params=None):
-
+    def __init__(
+        self, general_params, solver_params, sum_k, icrsh, h_int, iteration_offset, deg_orbs_ftps, gw_params=None, advanced_params=None
+    ):
         # Call the base class constructor
-        super().__init__(general_params, solver_params, sum_k, icrsh, h_int, iteration_offset,
-            deg_orbs_ftps, gw_params, advanced_params)
-
-
-
+        super().__init__(general_params, solver_params, sum_k, icrsh, h_int, iteration_offset, deg_orbs_ftps, gw_params, advanced_params)
 
         # sets up necessary GF objects on ImFreq
         self._init_ImFreq_objects()
@@ -37,18 +32,25 @@ class CTHYBInterface(AbstractDMFTSolver):
         # Create the cthyb solver specifics
         ###################################################
 
-
         if self.solver_params.get('random_seed') is None:
             self.random_seed_generator = None
         else:
             self.random_seed_generator = MathExpr(self.solver_params['random_seed'])
 
-
         # Separately stores all params that go into solve() call of solver
         self.triqs_solver_params = {}
-        keys_to_pass = ('imag_threshold', 'length_cycle', 'max_time', 'measure_density_matrix',
-                        'measure_G_l', 'measure_pert_order', 'move_double', 'move_shift',
-                        'off_diag_threshold', 'perform_tail_fit')
+        keys_to_pass = (
+            'imag_threshold',
+            'length_cycle',
+            'max_time',
+            'measure_density_matrix',
+            'measure_G_l',
+            'measure_pert_order',
+            'move_double',
+            'move_shift',
+            'off_diag_threshold',
+            'perform_tail_fit',
+        )
         for key in keys_to_pass:
             self.triqs_solver_params[key] = self.solver_params[key]
 
@@ -76,14 +78,22 @@ class CTHYBInterface(AbstractDMFTSolver):
         gf_struct = self.sum_k.gf_struct_solver_list[self.icrsh]
         # Construct the triqs_solver instances
         if self.solver_params['measure_G_l']:
-            self.triqs_solver = cthyb_solver(beta=self.general_params['beta'], gf_struct=gf_struct,
-                            n_iw=self.general_params['n_iw'], n_tau=self.general_params['n_tau'],
-                            n_l=self.solver_params['n_l'], delta_interface=self.solver_params['delta_interface'])
+            self.triqs_solver = cthyb_solver(
+                beta=self.general_params['beta'],
+                gf_struct=gf_struct,
+                n_iw=self.general_params['n_iw'],
+                n_tau=self.general_params['n_tau'],
+                n_l=self.solver_params['n_l'],
+                delta_interface=self.solver_params['delta_interface'],
+            )
         else:
-            self.triqs_solver = cthyb_solver(beta=self.general_params['beta'], gf_struct=gf_struct,
-                            n_iw=self.general_params['n_iw'], n_tau=self.general_params['n_tau'],
-                            delta_interface=self.solver_params['delta_interface'])
-
+            self.triqs_solver = cthyb_solver(
+                beta=self.general_params['beta'],
+                gf_struct=gf_struct,
+                n_iw=self.general_params['n_iw'],
+                n_tau=self.general_params['n_tau'],
+                delta_interface=self.solver_params['delta_interface'],
+            )
 
         # sets up metadata
         self.git_hash = triqs_cthyb_hash
@@ -91,17 +101,11 @@ class CTHYBInterface(AbstractDMFTSolver):
 
         return
 
-
-
-
-
     def solve(self, **kwargs):
-
         if self.random_seed_generator is not None:
-            self.triqs_solver_params['random_seed'] = int(self.random_seed_generator(it=kwargs["it"], rank=mpi.rank))
+            self.triqs_solver_params['random_seed'] = int(self.random_seed_generator(it=kwargs['it'], rank=mpi.rank))
         else:
             assert 'random_seed' not in self.triqs_solver_params
-
 
         if self.solver_params['delta_interface']:
             self.triqs_solver.Delta_tau << self.Delta_time
@@ -112,7 +116,7 @@ class CTHYBInterface(AbstractDMFTSolver):
 
         # update solver in h5 archive one last time for debugging if solve command crashes
         if self.general_params['store_solver'] and mpi.is_master_node():
-            with HDFArchive(self.general_params['jobname']+'/'+self.general_params['seedname']+'.h5', 'a') as archive:
+            with HDFArchive(self.general_params['jobname'] + '/' + self.general_params['seedname'] + '.h5', 'a') as archive:
                 if not 'it_-1' in archive['DMFT_input/solver']:
                     archive['DMFT_input/solver'].create_group('it_-1')
                 archive['DMFT_input/solver/it_-1'][f'S_{self.icrsh}'] = self.triqs_solver
@@ -133,8 +137,7 @@ class CTHYBInterface(AbstractDMFTSolver):
 
         # dump Delta_tau constructed internally from cthyb when delta_interface = False
         if self.general_params['store_solver'] and mpi.is_master_node():
-            with HDFArchive(self.general_params['jobname'] + '/' + self.general_params['seedname'] + '.h5',
-                            'a') as archive:
+            with HDFArchive(self.general_params['jobname'] + '/' + self.general_params['seedname'] + '.h5', 'a') as archive:
                 if not self.solver_params['delta_interface']:
                     archive['DMFT_input/solver/it_-1'][f'Delta_time_{self.icrsh}'] = self.triqs_solver.Delta_tau
         mpi.barrier()
@@ -145,12 +148,11 @@ class CTHYBInterface(AbstractDMFTSolver):
         return
 
     def postprocess(self):
-        r'''
+        r"""
         Organize G_freq, G_time, Sigma_freq and G_l from cthyb solver
-        '''
+        """
 
         def set_Gs_from_G_l():
-
             # create new G_freq and G_time
             for i, g in self.G_l:
                 g.enforce_discontinuity(np.identity(g.target_shape[0]))
@@ -210,7 +212,7 @@ class CTHYBInterface(AbstractDMFTSolver):
                         dlr_eps = self.solver_params['crm_dlr_eps']
                     else:
                         dlr_eps = self.general_params['dlr_eps']
-                    mpi.report(f"crm_dyson_solver with (wmax, eps) = ({dlr_wmax}, {dlr_eps}). ")
+                    mpi.report(f'crm_dyson_solver with (wmax, eps) = ({dlr_wmax}, {dlr_eps}). ')
                     G_dlr = fit_gf_dlr(self.triqs_solver.G_tau, w_max=dlr_wmax, eps=dlr_eps)
                     self.G_time_dlr = make_gf_dlr_imtime(G_dlr)
 
@@ -240,20 +242,18 @@ class CTHYBInterface(AbstractDMFTSolver):
                         for block, gf in self.Sigma_dlr:
                             np.random.seed(85281)
                             print('Minimizing Dyson via CRM for Σ[block]:', block)
-                            gf, _, _ = minimize_dyson(G0_dlr=G0_dlr_iw[block],
-                                                      G_dlr=G_dlr[block],
-                                                      Sigma_moments=self.triqs_solver.Sigma_moments[block]
-                                                      )
+                            gf, _, _ = minimize_dyson(
+                                G0_dlr=G0_dlr_iw[block], G_dlr=G_dlr[block], Sigma_moments=self.triqs_solver.Sigma_moments[block]
+                            )
                     else:
                         for deg_shell in self.sum_k.deg_shells[self.icrsh]:
                             for i, block in enumerate(deg_shell):
                                 if i == 0:
                                     np.random.seed(85281)
                                     print('Minimizing Dyson via CRM for Σ[block]:', block)
-                                    self.Sigma_dlr[block], _, _ = minimize_dyson(G0_dlr=G0_dlr_iw[block],
-                                                                                 G_dlr=G_dlr[block],
-                                                                                 Sigma_moments=self.triqs_solver.Sigma_moments[block]
-                                                                                 )
+                                    self.Sigma_dlr[block], _, _ = minimize_dyson(
+                                        G0_dlr=G0_dlr_iw[block], G_dlr=G_dlr[block], Sigma_moments=self.triqs_solver.Sigma_moments[block]
+                                    )
                                     sol_block = block
                                 else:
                                     self.Sigma_dlr[block] << self.Sigma_dlr[sol_block]
@@ -291,11 +291,4 @@ class CTHYBInterface(AbstractDMFTSolver):
             self.O_time = self.triqs_solver.O_tau
 
         return
-
-
-
-
-
-
-
 

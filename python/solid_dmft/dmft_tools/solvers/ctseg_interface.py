@@ -1,4 +1,3 @@
-
 import numpy as np
 from itertools import product
 
@@ -24,17 +23,17 @@ from solid_dmft.dmft_tools import common
 from triqs_ctseg import Solver as ctseg_solver
 from triqs_ctseg.version import triqs_ctseg_hash, version
 
-class CTSEGInterface(AbstractDMFTSolver):
 
-    def __init__(self, general_params, solver_params, sum_k, icrsh, h_int, iteration_offset,
-            deg_orbs_ftps, gw_params=None, advanced_params=None):
-        r'''
+class CTSEGInterface(AbstractDMFTSolver):
+    def __init__(
+        self, general_params, solver_params, sum_k, icrsh, h_int, iteration_offset, deg_orbs_ftps, gw_params=None, advanced_params=None
+    ):
+        r"""
         Initialize cthyb solver instance
-        '''
+        """
 
         # Call the base class constructor
-        super().__init__(general_params, solver_params, sum_k, icrsh, h_int, iteration_offset,
-            deg_orbs_ftps, gw_params, advanced_params)
+        super().__init__(general_params, solver_params, sum_k, icrsh, h_int, iteration_offset, deg_orbs_ftps, gw_params, advanced_params)
 
         # sets up necessary GF objects on ImFreq
         self._init_ImFreq_objects()
@@ -44,12 +43,16 @@ class CTSEGInterface(AbstractDMFTSolver):
         else:
             self.random_seed_generator = MathExpr(self.solver_params['random_seed'])
 
-
-
         # Separately stores all params that go into solve() call of solver
         self.triqs_solver_params = {}
-        keys_to_pass = ('length_cycle', 'max_time', 'measure_state_hist', 'measure_nn_tau', 'measure_G_tau',
-                        'measure_pert_order',)
+        keys_to_pass = (
+            'length_cycle',
+            'max_time',
+            'measure_state_hist',
+            'measure_nn_tau',
+            'measure_G_tau',
+            'measure_pert_order',
+        )
         for key in keys_to_pass:
             self.triqs_solver_params[key] = self.solver_params[key]
 
@@ -65,14 +68,15 @@ class CTSEGInterface(AbstractDMFTSolver):
         else:
             self.triqs_solver_params['measure_F_tau'] = False
 
-
         gf_struct = self.sum_k.gf_struct_solver_list[self.icrsh]
 
         # Construct the triqs_solver instances
-        self.triqs_solver = ctseg_solver(beta=self.general_params['beta'], gf_struct=gf_struct,
-                        n_tau=self.general_params['n_tau'],
-                        n_tau_bosonic=int(self.solver_params['n_tau_bosonic']))
-
+        self.triqs_solver = ctseg_solver(
+            beta=self.general_params['beta'],
+            gf_struct=gf_struct,
+            n_tau=self.general_params['n_tau'],
+            n_tau_bosonic=int(self.solver_params['n_tau_bosonic']),
+        )
 
         self.git_hash = triqs_ctseg_hash
         self.version = version
@@ -80,7 +84,7 @@ class CTSEGInterface(AbstractDMFTSolver):
     def solve(self, **kwargs):
         # what does this do exactly?
         if self.random_seed_generator is not None:
-            self.triqs_solver_params['random_seed'] = int(self.random_seed_generator(it=kwargs["it"], rank=mpi.rank))
+            self.triqs_solver_params['random_seed'] = int(self.random_seed_generator(it=kwargs['it'], rank=mpi.rank))
         else:
             assert 'random_seed' not in self.triqs_solver_params
 
@@ -91,7 +95,7 @@ class CTSEGInterface(AbstractDMFTSolver):
             mpi.report('add dynamic interaction from AIMBES')
             # convert 4 idx tensor to two index tensor
             Uloc_dlr = self.gw_params['Uloc_dlr'][self.icrsh]['up']
-            Uloc_dlr_2idx_prime = Gf(mesh=Uloc_dlr.mesh, target_shape=[Uloc_dlr.target_shape[0],Uloc_dlr.target_shape[1]])
+            Uloc_dlr_2idx_prime = Gf(mesh=Uloc_dlr.mesh, target_shape=[Uloc_dlr.target_shape[0], Uloc_dlr.target_shape[1]])
 
             for coeff in Uloc_dlr.mesh:
                 Uloc_dlr_idx = Uloc_dlr[coeff]
@@ -102,10 +106,9 @@ class CTSEGInterface(AbstractDMFTSolver):
             Uloc_tau_2idx_prime = make_gf_imtime(Uloc_dlr_2idx_prime, n_tau=self.solver_params['n_tau_bosonic'])
 
             Uloc_tau_2idx_prime_sumk = BlockGf(name_list=['up', 'down'], block_list=[Uloc_tau_2idx_prime, Uloc_tau_2idx_prime])
-            Uloc_tau_2idx_prime_solver = self.sum_k.block_structure.convert_gf(Uloc_tau_2idx_prime_sumk,
-                                                                                ish_from=self.icrsh,
-                                                                                space_from='sumk',
-                                                                                space_to='solver')
+            Uloc_tau_2idx_prime_solver = self.sum_k.block_structure.convert_gf(
+                Uloc_tau_2idx_prime_sumk, ish_from=self.icrsh, space_from='sumk', space_to='solver'
+            )
 
             # fill D0_tau from Uloc_tau_2idx_prime
             for iblock, Uloc_i in Uloc_tau_2idx_prime_solver:
@@ -117,11 +120,11 @@ class CTSEGInterface(AbstractDMFTSolver):
             # TODO: add Jerp_Iw to the solver
 
             # self.triqs_solver. Jperp_iw << make_gf_imfreq(Uloc_dlr_2idx, n_iw=self.general_params['n_w_b_nn']) + V
-        mpi.report('\nLocal interaction Hamiltonian is:',self.h_int)
+        mpi.report('\nLocal interaction Hamiltonian is:', self.h_int)
 
         # update solver in h5 archive one last time for debugging if solve command crashes
         if self.general_params['store_solver'] and mpi.is_master_node():
-            with HDFArchive(self.general_params['jobname']+'/'+self.general_params['seedname']+'.h5', 'a') as archive:
+            with HDFArchive(self.general_params['jobname'] + '/' + self.general_params['seedname'] + '.h5', 'a') as archive:
                 if 'it_-1' not in archive['DMFT_input/solver']:
                     archive['DMFT_input/solver'].create_group('it_-1')
                 archive['DMFT_input/solver/it_-1'][f'S_{self.icrsh}'] = self.triqs_solver
@@ -144,16 +147,17 @@ class CTSEGInterface(AbstractDMFTSolver):
         self.postprocess()
 
     def postprocess(self):
-        r'''
+        r"""
         Organize G_freq, G_time, Sigma_freq and G_l from ctseg solver
-        '''
+        """
         from triqs.operators.util.extractors import extract_U_dict2, dict_to_matrix
         from solid_dmft.postprocessing.eval_U_cRPA_RESPACK import construct_Uijkl
 
         def set_Gs_from_G_l():
-
             if self.solver_params['improved_estimator'] and mpi.is_master_node():
-                print('\n !!!!WARNING!!!! \n you enabled both improved estimators and legendre based filtering / sampling. Sigma will be overwritten by legendre result.  \n !!!!WARNING!!!!\n')
+                print(
+                    '\n !!!!WARNING!!!! \n you enabled both improved estimators and legendre based filtering / sampling. Sigma will be overwritten by legendre result.  \n !!!!WARNING!!!!\n'
+                )
 
             # create new G_freq and G_time
             for i, g in self.G_l:
@@ -182,13 +186,15 @@ class CTSEGInterface(AbstractDMFTSolver):
         self.sum_k.symm_deg_gf(self.G_time, ish=self.icrsh)
 
         # get occupation matrix
-        self.orbital_occupations = {bl: np.zeros((bl_size,bl_size)) for bl, bl_size in self.sum_k.gf_struct_solver_list[self.icrsh]}
+        self.orbital_occupations = {bl: np.zeros((bl_size, bl_size)) for bl, bl_size in self.sum_k.gf_struct_solver_list[self.icrsh]}
         for block, norb in self.sum_k.gf_struct_solver[self.icrsh].items():
-            self.orbital_occupations[block] = np.zeros((norb,norb))
+            self.orbital_occupations[block] = np.zeros((norb, norb))
             for iorb in range(norb):
                 self.orbital_occupations[block][iorb, iorb] = self.triqs_solver.results.densities[block][iorb]
 
-        self.orbital_occupations_sumk = self.sum_k.block_structure.convert_matrix(self.orbital_occupations, ish_from=self.icrsh, space_from='solver', space_to='sumk')
+        self.orbital_occupations_sumk = self.sum_k.block_structure.convert_matrix(
+            self.orbital_occupations, ish_from=self.icrsh, space_from='solver', space_to='sumk'
+        )
         self.Sigma_Hartree = {}
         self.Sigma_Hartree_sumk = {}
         self.Sigma_moments = {}
@@ -200,7 +206,7 @@ class CTSEGInterface(AbstractDMFTSolver):
             norb = norb[self.icrsh]['up']
             U_dd = dict_to_matrix(U_dict, gf_struct=self.sum_k.gf_struct_solver_list[self.icrsh])
             # extract Uijij and Uijji terms
-            Uijij = U_dd[0:norb, norb:2*norb]
+            Uijij = U_dd[0:norb, norb : 2 * norb]
             Uijji = Uijij - U_dd[0:norb, 0:norb]
             # and construct full Uijkl tensor
             Uijkl = construct_Uijkl(Uijij, Uijji)
@@ -208,13 +214,17 @@ class CTSEGInterface(AbstractDMFTSolver):
             # now calculated Hartree shift via
             # \Sigma^0_{\alpha \beta} = \sum_{i j} n_{i j} \left( 2 U_{\alpha i \beta j} - U_{\alpha i j \beta} \right)
             for block, norb in self.sum_k.gf_struct_sumk[self.icrsh]:
-                self.Sigma_Hartree_sumk[block] = np.zeros((norb, norb),dtype=float)
+                self.Sigma_Hartree_sumk[block] = np.zeros((norb, norb), dtype=float)
                 for iorb, jorb in product(range(norb), repeat=2):
                     for inner in range(norb):
-                        self.Sigma_Hartree_sumk[block][iorb,jorb] += self.orbital_occupations_sumk[block][inner, inner].real * ( 2*Uijkl[iorb, inner, jorb, inner].real - Uijkl[iorb, inner, inner, jorb].real )
+                        self.Sigma_Hartree_sumk[block][iorb, jorb] += self.orbital_occupations_sumk[block][inner, inner].real * (
+                            2 * Uijkl[iorb, inner, jorb, inner].real - Uijkl[iorb, inner, inner, jorb].real
+                        )
 
             # convert to solver block structure
-            self.Sigma_Hartree = self.sum_k.block_structure.convert_matrix(self.Sigma_Hartree_sumk, ish_from=self.icrsh, space_from='sumk', space_to='solver')
+            self.Sigma_Hartree = self.sum_k.block_structure.convert_matrix(
+                self.Sigma_Hartree_sumk, ish_from=self.icrsh, space_from='sumk', space_to='solver'
+            )
 
             # use degenerate shell information to symmetrize
             self.sum_k.symm_deg_gf(self.Sigma_Hartree, ish=self.icrsh)
@@ -229,7 +239,7 @@ class CTSEGInterface(AbstractDMFTSolver):
 
         if mpi.is_master_node():
             # create empty moment container (list of np.arrays)
-            Gf_known_moments = make_zero_tail(self.G_freq,n_moments=2)
+            Gf_known_moments = make_zero_tail(self.G_freq, n_moments=2)
             for i, bl in enumerate(self.G_freq.indices):
                 # 0 moment is 0, dont touch it, but first moment is 1 for the Gf
                 Gf_known_moments[i][1] = np.eye(self.G_freq[bl].target_shape[0])
@@ -249,13 +259,15 @@ class CTSEGInterface(AbstractDMFTSolver):
         elif self.solver_params['perform_tail_fit']:
             self.Sigma_freq = inverse(self.G0_freq) - inverse(self.G_freq)
             # without any degenerate shells we run the minimization for all blocks
-            self.Sigma_freq, tail = self._fit_tail_window(self.Sigma_freq,
-                                                fit_min_n=self.solver_params['fit_min_n'],
-                                                fit_max_n=self.solver_params['fit_max_n'],
-                                                fit_min_w=self.solver_params['fit_min_w'],
-                                                fit_max_w=self.solver_params['fit_max_w'],
-                                                fit_max_moment=self.solver_params['fit_max_moment'],
-                                                fit_known_moments=self.Sigma_moments)
+            self.Sigma_freq, tail = self._fit_tail_window(
+                self.Sigma_freq,
+                fit_min_n=self.solver_params['fit_min_n'],
+                fit_max_n=self.solver_params['fit_max_n'],
+                fit_min_w=self.solver_params['fit_min_w'],
+                fit_max_w=self.solver_params['fit_max_w'],
+                fit_max_moment=self.solver_params['fit_max_moment'],
+                fit_known_moments=self.Sigma_moments,
+            )
 
             # recompute G_freq from Sigma with fitted tail
             self.G_freq = inverse(inverse(self.G0_freq) - self.Sigma_freq)
@@ -272,7 +284,7 @@ class CTSEGInterface(AbstractDMFTSolver):
                     self.F_freq[bl] << Fourier(self.triqs_solver.results.F_tau[bl], F_known_moments[i])
                 # fit tail of improved estimator and G_freq
                 self.F_freq << self._gf_fit_tail_fraction(self.F_freq, fraction=0.9, replace=0.5, known_moments=F_known_moments)
-                self.G_freq << self._gf_fit_tail_fraction(self.G_freq ,fraction=0.9, replace=0.5, known_moments=Gf_known_moments)
+                self.G_freq << self._gf_fit_tail_fraction(self.G_freq, fraction=0.9, replace=0.5, known_moments=Gf_known_moments)
 
             self.F_freq << mpi.bcast(self.F_freq)
             self.G_freq << mpi.bcast(self.G_freq)
@@ -295,7 +307,7 @@ class CTSEGInterface(AbstractDMFTSolver):
                     dlr_eps = self.solver_params['crm_dlr_eps']
                 else:
                     dlr_eps = self.general_params['dlr_eps']
-                mpi.report(f"crm_dyson_solver with (wmax, eps) = ({dlr_wmax}, {dlr_eps}). ")
+                mpi.report(f'crm_dyson_solver with (wmax, eps) = ({dlr_wmax}, {dlr_eps}). ')
                 G_dlr = fit_gf_dlr(self.triqs_solver.results.G_tau, w_max=dlr_wmax, eps=dlr_eps)
                 self.G_time_dlr = make_gf_dlr_imtime(G_dlr)
                 self.G_freq = make_gf_imfreq(G_dlr, n_iw=self.general_params['n_iw'])
@@ -321,20 +333,16 @@ class CTSEGInterface(AbstractDMFTSolver):
                     for block, gf in self.Sigma_dlr:
                         np.random.seed(85281)
                         print('Minimizing Dyson via CRM for Σ[block]:', block)
-                        gf, _, _ = minimize_dyson(G0_dlr=G0_dlr_iw[block],
-                                                  G_dlr=G_dlr[block],
-                                                  Sigma_moments=self.Sigma_moments[block]
-                                                  )
+                        gf, _, _ = minimize_dyson(G0_dlr=G0_dlr_iw[block], G_dlr=G_dlr[block], Sigma_moments=self.Sigma_moments[block])
                 else:
                     for deg_shell in self.sum_k.deg_shells[self.icrsh]:
                         for i, block in enumerate(deg_shell):
                             if i == 0:
                                 np.random.seed(85281)
                                 print('Minimizing Dyson via CRM for Σ[block]:', block)
-                                self.Sigma_dlr[block], _, _ = minimize_dyson(G0_dlr=G0_dlr_iw[block],
-                                                                    G_dlr=G_dlr[block],
-                                                                    Sigma_moments=self.Sigma_moments[block]
-                                                                    )
+                                self.Sigma_dlr[block], _, _ = minimize_dyson(
+                                    G0_dlr=G0_dlr_iw[block], G_dlr=G_dlr[block], Sigma_moments=self.Sigma_moments[block]
+                                )
                                 sol_block = block
                             else:
                                 print(f'Copying result from first block of deg list to {block}')
@@ -346,7 +354,6 @@ class CTSEGInterface(AbstractDMFTSolver):
                 self.G_freq = inverse(inverse(self.G0_freq) - self.Sigma_freq)
                 print('\n')
 
-
             mpi.barrier()
             self.Sigma_freq = mpi.bcast(self.Sigma_freq)
             self.Sigma_dlr = mpi.bcast(self.Sigma_dlr)
@@ -356,16 +363,14 @@ class CTSEGInterface(AbstractDMFTSolver):
             mpi.report('\n!!!! WARNING !!!! tail of solver output not handled! Turn on either measure_ft, legendre_fit\n')
             self.Sigma_freq << inverse(self.G0_freq) - inverse(self.G_freq)
 
-
         if self.solver_params['measure_state_hist']:
             self.state_histogram = self.triqs_solver.results.state_hist
 
         if self.solver_params['measure_pert_order']:
-            self.perturbation_order_histo  = self.triqs_solver.results.pert_order_Delta
+            self.perturbation_order_histo = self.triqs_solver.results.pert_order_Delta
             bin_vec = np.arange(0, self.perturbation_order_histo.data.shape[0])
             self.avg_pert_order = np.sum(bin_vec * self.perturbation_order_histo.data[:])
             if mpi.is_master_node():
                 print(f'Average perturbation order: {self.avg_pert_order}')
 
         return
-

@@ -1,4 +1,3 @@
-
 from itertools import product
 
 from triqs.gf import make_hermitian
@@ -17,17 +16,13 @@ from solid_dmft.dmft_tools.solvers.abstractdmftsolver import AbstractDMFTSolver
 from triqs_ctint import Solver as ctint_solver
 from triqs_ctint.version import triqs_ctint_hash, version
 
+
 class CTINTInterface(AbstractDMFTSolver):
-
-    def __init__(self, general_params, solver_params, sum_k, icrsh, h_int, iteration_offset,
-            deg_orbs_ftps, gw_params=None, advanced_params=None):
-
+    def __init__(
+        self, general_params, solver_params, sum_k, icrsh, h_int, iteration_offset, deg_orbs_ftps, gw_params=None, advanced_params=None
+    ):
         # Call the base class constructor
-        super().__init__(general_params, solver_params, sum_k, icrsh, h_int, iteration_offset,
-            deg_orbs_ftps, gw_params, advanced_params)
-
-
-
+        super().__init__(general_params, solver_params, sum_k, icrsh, h_int, iteration_offset, deg_orbs_ftps, gw_params, advanced_params)
 
         # sets up necessary GF objects on ImFreq
         self._init_ImFreq_objects()
@@ -43,23 +38,17 @@ class CTINTInterface(AbstractDMFTSolver):
         else:
             self.random_seed_generator = MathExpr(self.solver_params['random_seed'])
 
-
-
-
-
-
         # Separately stores all params that go into solve() call of solver
         self.triqs_solver_params = {}
 
         # keys with same name
-        keys_to_pass = ('length_cycle', 'max_time',  'n_warmup_cycles')
+        keys_to_pass = ('length_cycle', 'max_time', 'n_warmup_cycles')
         for key in keys_to_pass:
             self.triqs_solver_params[key] = self.solver_params[key]
 
-        #keys with different name
+        # keys with different name
         self.triqs_solver_params['measure_histogram'] = self.solver_params.get('measure_pert_order')
         self.triqs_solver_params['use_double_insertion'] = self.solver_params.get('move_double')
-
 
         # Calculates number of sweeps per rank
         self.triqs_solver_params['n_cycles'] = int(self.solver_params['n_cycles_tot'] / mpi.size)
@@ -68,37 +57,43 @@ class CTINTInterface(AbstractDMFTSolver):
 
         if self.general_params['h_int_type'][self.icrsh] == 'dyn_density_density':
             self.U_iw = None
-            if  mpi.is_master_node():
-                with HDFArchive(self.general_params['jobname']+'/'+self.general_params['seedname']+'.h5', 'r') as archive:
+            if mpi.is_master_node():
+                with HDFArchive(self.general_params['jobname'] + '/' + self.general_params['seedname'] + '.h5', 'r') as archive:
                     self.U_iw = archive['dynamic_U']['U_iw']
             self.U_iw = mpi.bcast(self.U_iw)
-            n_iw_dyn = self.U_iw[self.icrsh].mesh.last_index()+1
+            n_iw_dyn = self.U_iw[self.icrsh].mesh.last_index() + 1
             # Construct the triqs_solver instances
-            self.triqs_solver = ctint_solver(beta=self.general_params['beta'], gf_struct=gf_struct,
-                            n_iw=self.general_params['n_iw'], n_tau=self.general_params['n_tau'], use_D=True, use_Jperp=False,
-                            n_iw_dynamical_interactions=n_iw_dyn,n_tau_dynamical_interactions=(int(n_iw_dyn*2.5)))
+            self.triqs_solver = ctint_solver(
+                beta=self.general_params['beta'],
+                gf_struct=gf_struct,
+                n_iw=self.general_params['n_iw'],
+                n_tau=self.general_params['n_tau'],
+                use_D=True,
+                use_Jperp=False,
+                n_iw_dynamical_interactions=n_iw_dyn,
+                n_tau_dynamical_interactions=(int(n_iw_dyn * 2.5)),
+            )
         else:
             # Construct the triqs_solver instances
-            self.triqs_solver = ctint_solver(beta=self.general_params['beta'], gf_struct=gf_struct,
-                            n_iw=self.general_params['n_iw'], n_tau=self.general_params['n_tau'], use_D=False, use_Jperp=False)
-
+            self.triqs_solver = ctint_solver(
+                beta=self.general_params['beta'],
+                gf_struct=gf_struct,
+                n_iw=self.general_params['n_iw'],
+                n_tau=self.general_params['n_tau'],
+                use_D=False,
+                use_Jperp=False,
+            )
 
         # set up metadata
         self.git_hash = triqs_ctint_hash
         self.version = version
 
-
         return
 
-
-
-
-
     def solve(self, **kwargs):
-
         # what does this do exactly?
         if self.random_seed_generator is not None:
-            self.triqs_solver_params['random_seed'] = int(self.random_seed_generator(it=kwargs["it"], rank=mpi.rank))
+            self.triqs_solver_params['random_seed'] = int(self.random_seed_generator(it=kwargs['it'], rank=mpi.rank))
         else:
             assert 'random_seed' not in self.triqs_solver_params
 
@@ -107,7 +102,7 @@ class CTINTInterface(AbstractDMFTSolver):
 
         if self.general_params['h_int_type'][self.icrsh] == 'dynamic':
             for b1, b2 in product(self.sum_k.gf_struct_solver_dict[self.icrsh].keys(), repeat=2):
-                self.triqs_solver.D0_iw[b1,b2] << self.U_iw[self.icrsh]
+                self.triqs_solver.D0_iw[b1, b2] << self.U_iw[self.icrsh]
 
         # Solve the impurity problem for icrsh shell
         # *************************************
@@ -120,10 +115,10 @@ class CTINTInterface(AbstractDMFTSolver):
         return
 
     def postprocess(self):
-        r'''
+        r"""
         Organize G_freq, G_time, Sigma_freq and G_l from cthyb solver
-        '''
-        #TODO
+        """
+        # TODO
 
         # def set_Gs_from_G_l():
 
