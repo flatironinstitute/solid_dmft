@@ -24,10 +24,9 @@
 ################################################################################
 # pyright: reportUnusedExpression=false
 import numpy as np
-from itertools import product
 
-from triqs.gf import MeshImTime, MeshReTime, MeshDLRImFreq, MeshReFreq, MeshLegendre, Gf, BlockGf, make_gf_imfreq, make_hermitian, Omega, iOmega_n, make_gf_from_fourier, make_gf_dlr, fit_gf_dlr, make_gf_dlr_imtime, make_gf_imtime
-from triqs.operators import c_dag, c, Operator, util
+from triqs.gf import MeshImTime, MeshReTime, MeshReFreq, MeshLegendre, Gf, BlockGf
+from triqs.operators import Operator
 
 # import abc
 from abc import ABC, abstractmethod
@@ -74,9 +73,9 @@ class AbstractDMFTSolver(ABC):
         self.h_int = h_int
         self.iteration_offset = iteration_offset
         self.deg_orbs_ftps = deg_orbs_ftps
-        
-        
-        
+
+
+
         if self.solver_params.get('crm_dyson_solver'):
             self.G_time_dlr = None
             self.Sigma_dlr = None
@@ -91,7 +90,7 @@ class AbstractDMFTSolver(ABC):
         if self.solver_params.get('delta_interface'):
             self.Hloc_0 = Operator()
 
-    
+
     # ********************************************************************
     # initialize Freq and Time objects
     # ********************************************************************
@@ -129,7 +128,7 @@ class AbstractDMFTSolver(ABC):
                                                             )
             # move original G_freq to G_freq_orig
             self.G_time_orig = self.G_time.copy()
-        
+
 
 
 
@@ -184,7 +183,7 @@ class AbstractDMFTSolver(ABC):
         pass
 
 
-    
+
 
     @staticmethod
     def _gf_fit_tail_fraction(Gf, fraction=0.4, replace=None, known_moments=[]):
@@ -301,7 +300,7 @@ class AbstractDMFTSolver(ABC):
             replace_by_tail(sig, tail, n_min=fit_min_n)
 
         return Sigma_fit, tail_barr
-    
+
 
     def _make_spin_equal(self, Sigma):
 
@@ -311,5 +310,5 @@ class AbstractDMFTSolver(ABC):
             Sigma['down_0'] = Sigma['up_0']
 
         return Sigma
-    
+
 

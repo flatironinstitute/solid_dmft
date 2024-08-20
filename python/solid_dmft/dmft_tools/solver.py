@@ -77,9 +77,9 @@ def create_solver(general_params, solver_params, sum_k, icrsh, h_int, iteration_
         '''
         if solver_params['type'] in interfaces_dict.keys():
             mpi.report(f"Using {solver_params['type']} solver")
-            solver_interface = interfaces_dict[solver_params['type']] 
+            solver_interface = interfaces_dict[solver_params['type']]
             return solver_interface(general_params, solver_params, sum_k, icrsh, h_int,
                                 iteration_offset, deg_orbs_ftps, gw_params, advanced_params)
         else:
-            raise ValueError(f"Unknown solver type {solver_params['type']}")
+            raise ValueError(f"Unknown solver type {solver_params['type']}, check spelling of solver and installation of triqs solver")
 

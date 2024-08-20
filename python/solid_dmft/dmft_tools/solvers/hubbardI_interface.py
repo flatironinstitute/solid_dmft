@@ -1,22 +1,5 @@
 
-import numpy as np
-from itertools import product
-
-from triqs.gf import MeshImTime, MeshReTime, MeshDLRImFreq, MeshReFreq, MeshLegendre, Gf, BlockGf, make_gf_imfreq, make_hermitian, Omega, iOmega_n, make_gf_from_fourier, make_gf_dlr, fit_gf_dlr, make_gf_dlr_imtime, make_gf_imtime
-from triqs.gf.tools import inverse, make_zero_tail
-from triqs.gf.descriptors import Fourier
-from triqs.operators import c_dag, c, Operator, util
-from triqs.operators.util.U_matrix import reduce_4index_to_2index
-from triqs.operators.util.extractors import block_matrix_from_op
-import triqs.utility.mpi as mpi
-import itertools
-from h5 import HDFArchive
-
-from solid_dmft.io_tools.dict_to_h5 import prep_params_for_h5
-
-from solid_dmft.dmft_tools import legendre_filter
-from solid_dmft.dmft_tools.matheval import MathExpr
-
+from triqs.gf import MeshReFreq, Gf, make_hermitian
 
 # import of the abstract class
 from solid_dmft.dmft_tools.solvers.abstractdmftsolver import AbstractDMFTSolver
@@ -37,7 +20,7 @@ class HubbardIInterface(AbstractDMFTSolver):
         # Call the base class constructor
         super().__init__(general_params, solver_params, sum_k, icrsh, h_int, iteration_offset,
             deg_orbs_ftps, gw_params, advanced_params)
-        
+
         # Create the hartree solver specifics
         # Separately stores all params that go into solve() call of solver
         # All params need to be renamed
@@ -61,7 +44,7 @@ class HubbardIInterface(AbstractDMFTSolver):
                                            n_w=self.general_params['n_w'], idelta=self.general_params['eta'],
                                            w_min=self.general_params['w_range'][0], w_max=self.general_params['w_range'][1])
 
-        
+
 
         # sets up necessary GF objects on ImFreq
         self._init_ImFreq_objects()
@@ -71,8 +54,8 @@ class HubbardIInterface(AbstractDMFTSolver):
         self.git_hash = triqs_hubbardI_hash
         self.version = version
         return
-    
-    
+
+
     def solve(self, **kwargs):
         # fill G0_freq from sum_k to solver
         self.triqs_solver.G0_iw << self.G0_freq
@@ -108,7 +91,7 @@ class HubbardIInterface(AbstractDMFTSolver):
         # call postprocessing
         self.postprocess()
 
-        return  
+        return
 
     def postprocess(self):
         r'''
@@ -133,8 +116,8 @@ class HubbardIInterface(AbstractDMFTSolver):
         if self.solver_params['measure_G_tau']:
             self.G_time << self.triqs_solver.G_tau
 
-        return 
-    
+        return
+
     def _init_ReFreq_hubbardI(self):
         r'''
         Initialize all ReFreq objects

@@ -1,21 +1,6 @@
-import numpy as np
-from itertools import product
-
-from triqs.gf import MeshImTime, MeshReTime, MeshDLRImFreq, MeshReFreq, MeshLegendre, Gf, BlockGf, make_gf_imfreq, make_hermitian, Omega, iOmega_n, make_gf_from_fourier, make_gf_dlr, fit_gf_dlr, make_gf_dlr_imtime, make_gf_imtime
-from triqs.gf.tools import inverse, make_zero_tail
+from triqs.gf import MeshReFreq, Gf
 from triqs.gf.descriptors import Fourier
-from triqs.operators import c_dag, c, Operator, util
-from triqs.operators.util.U_matrix import reduce_4index_to_2index
-from triqs.operators.util.extractors import block_matrix_from_op
 import triqs.utility.mpi as mpi
-import itertools
-from h5 import HDFArchive
-
-from solid_dmft.io_tools.dict_to_h5 import prep_params_for_h5
-
-from solid_dmft.dmft_tools import legendre_filter
-from solid_dmft.dmft_tools.matheval import MathExpr
-
 
 # import of the abstract class
 from solid_dmft.dmft_tools.solvers.abstractdmftsolver import AbstractDMFTSolver
@@ -32,14 +17,14 @@ class HartreeInterface(AbstractDMFTSolver):
         # Call the base class constructor
         super().__init__(general_params, solver_params, sum_k, icrsh, h_int, iteration_offset,
             deg_orbs_ftps, gw_params, advanced_params)
-        
+
         # Create the hartree solver specifics
-    
+
         self.triqs_solver_params = {}
         keys_to_pass = ('method', 'one_shot', 'tol', 'with_fock')
         for key in keys_to_pass:
             self.triqs_solver_params[key] = self.solver_params[key]
-        
+
         # sets up necessary GF objects on ImFreq
         self._init_ImFreq_objects()
         self._init_ReFreq_hartree() # definition at the end of the class
@@ -56,7 +41,7 @@ class HartreeInterface(AbstractDMFTSolver):
                                       dc_U= self.general_params['U'][self.icrsh],
                                       dc_J= self.general_params['J'][self.icrsh]
                                       )
-        
+
         # Give dc information to the solver in order to customize DC calculation
         def _interface_hartree_dc(hartree_instance, general_params, advanced_params, icrsh):
             """ Modifies in-place class attributes to infercace with options in solid_dmft
@@ -114,10 +99,10 @@ class HartreeInterface(AbstractDMFTSolver):
         self.version = version
 
         return
-        
-        
-        
-        
+
+
+
+
     def _init_ReFreq_hartree(self):
         r'''
         Initialize all ReFreq objects
@@ -128,7 +113,7 @@ class HartreeInterface(AbstractDMFTSolver):
         self.Sigma_Refreq = self.sum_k.block_structure.create_gf(ish=self.icrsh, gf_function=Gf, space='solver',
                                                                 mesh=MeshReFreq(n_w=self.n_w, window=self.general_params['w_range'])
                                                                 )
-    
+
     def solve(self, **kwargs):
 
         # fill G0_freq from sum_k to solver
@@ -136,13 +121,13 @@ class HartreeInterface(AbstractDMFTSolver):
 
         # Solve the impurity problem for icrsh shell
         # *************************************
-        # this is done on every node due to very slow bcast 
+        # this is done on every node due to very slow bcast
         self.triqs_solver.solve(h_int=self.h_int, **self.triqs_solver_params)
 
         # call postprocessing
         self.postprocess()
 
-        return 
+        return
 
     def postprocess(self):
         r'''
@@ -166,6 +151,6 @@ class HartreeInterface(AbstractDMFTSolver):
 
 
 
-        
-        
-    
+
+
+

@@ -1,7 +1,7 @@
 
 import numpy as np
-from triqs.gf import MeshImTime, MeshReTime, MeshDLRImFreq, MeshReFreq, MeshLegendre, Gf, BlockGf, make_gf_imfreq, make_hermitian, Omega, iOmega_n, make_gf_from_fourier, make_gf_dlr, fit_gf_dlr, make_gf_dlr_imtime, make_gf_imtime
-from triqs.gf.tools import inverse, make_zero_tail
+from triqs.gf import MeshDLRImFreq, Gf, make_gf_imfreq, make_hermitian,fit_gf_dlr, make_gf_dlr_imtime
+from triqs.gf.tools import inverse
 import triqs.utility.mpi as mpi
 from h5 import HDFArchive
 
@@ -26,9 +26,9 @@ class CTHYBInterface(AbstractDMFTSolver):
         # Call the base class constructor
         super().__init__(general_params, solver_params, sum_k, icrsh, h_int, iteration_offset,
             deg_orbs_ftps, gw_params, advanced_params)
-        
-        
-        
+
+
+
 
         # sets up necessary GF objects on ImFreq
         self._init_ImFreq_objects()
@@ -36,13 +36,13 @@ class CTHYBInterface(AbstractDMFTSolver):
         ###################################################
         # Create the cthyb solver specifics
         ###################################################
-        
-        
+
+
         if self.solver_params.get('random_seed') is None:
             self.random_seed_generator = None
         else:
             self.random_seed_generator = MathExpr(self.solver_params['random_seed'])
-        
+
 
         # Separately stores all params that go into solve() call of solver
         self.triqs_solver_params = {}
@@ -83,18 +83,18 @@ class CTHYBInterface(AbstractDMFTSolver):
             self.triqs_solver = cthyb_solver(beta=self.general_params['beta'], gf_struct=gf_struct,
                             n_iw=self.general_params['n_iw'], n_tau=self.general_params['n_tau'],
                             delta_interface=self.solver_params['delta_interface'])
-        
-        
+
+
         # sets up metadata
         self.git_hash = triqs_cthyb_hash
         self.version = version
 
-        return 
-        
-        
-        
-        
-    
+        return
+
+
+
+
+
     def solve(self, **kwargs):
 
         if self.random_seed_generator is not None:
@@ -142,7 +142,7 @@ class CTHYBInterface(AbstractDMFTSolver):
         # call postprocessing
         self.postprocess()
 
-        return 
+        return
 
     def postprocess(self):
         r'''
@@ -291,11 +291,11 @@ class CTHYBInterface(AbstractDMFTSolver):
             self.O_time = self.triqs_solver.O_tau
 
         return
-        
 
 
 
 
-        
-        
-    
+
+
+
+

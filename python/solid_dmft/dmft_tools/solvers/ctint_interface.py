@@ -1,9 +1,8 @@
 
-import numpy as np
 from itertools import product
 
-from triqs.gf import MeshImTime, MeshReTime, MeshDLRImFreq, MeshReFreq, MeshLegendre, Gf, BlockGf, make_gf_imfreq, make_hermitian, Omega, iOmega_n, make_gf_from_fourier, make_gf_dlr, fit_gf_dlr, make_gf_dlr_imtime, make_gf_imtime
-from triqs.gf.tools import inverse, make_zero_tail
+from triqs.gf import make_hermitian
+from triqs.gf.tools import inverse
 from triqs.gf.descriptors import Fourier
 import triqs.utility.mpi as mpi
 from h5 import HDFArchive
@@ -26,9 +25,9 @@ class CTINTInterface(AbstractDMFTSolver):
         # Call the base class constructor
         super().__init__(general_params, solver_params, sum_k, icrsh, h_int, iteration_offset,
             deg_orbs_ftps, gw_params, advanced_params)
-        
-        
-        
+
+
+
 
         # sets up necessary GF objects on ImFreq
         self._init_ImFreq_objects()
@@ -38,7 +37,7 @@ class CTINTInterface(AbstractDMFTSolver):
         ###################################################
         self._init_ImFreq_objects()
         # set up solver
-        
+
         if self.solver_params.get('random_seed') is None:
             self.random_seed_generator = None
         else:
@@ -46,8 +45,8 @@ class CTINTInterface(AbstractDMFTSolver):
 
 
 
-        
-        
+
+
 
         # Separately stores all params that go into solve() call of solver
         self.triqs_solver_params = {}
@@ -56,7 +55,7 @@ class CTINTInterface(AbstractDMFTSolver):
         keys_to_pass = ('length_cycle', 'max_time',  'n_warmup_cycles')
         for key in keys_to_pass:
             self.triqs_solver_params[key] = self.solver_params[key]
-        
+
         #keys with different name
         self.triqs_solver_params['measure_histogram'] = self.solver_params.get('measure_pert_order')
         self.triqs_solver_params['use_double_insertion'] = self.solver_params.get('move_double')
@@ -82,19 +81,19 @@ class CTINTInterface(AbstractDMFTSolver):
             # Construct the triqs_solver instances
             self.triqs_solver = ctint_solver(beta=self.general_params['beta'], gf_struct=gf_struct,
                             n_iw=self.general_params['n_iw'], n_tau=self.general_params['n_tau'], use_D=False, use_Jperp=False)
-        
-        
+
+
         # set up metadata
         self.git_hash = triqs_ctint_hash
         self.version = version
 
 
         return
-        
-        
-        
-        
-    
+
+
+
+
+
     def solve(self, **kwargs):
 
         # what does this do exactly?
@@ -118,7 +117,7 @@ class CTINTInterface(AbstractDMFTSolver):
         # call postprocessing
         self.postprocess()
 
-        return 
+        return
 
     def postprocess(self):
         r'''

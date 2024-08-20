@@ -2,7 +2,7 @@
 import numpy as np
 from itertools import product
 
-from triqs.gf import MeshImTime, MeshReTime, MeshDLRImFreq, MeshReFreq, MeshLegendre, Gf, BlockGf, make_gf_imfreq, make_hermitian, Omega, iOmega_n, make_gf_from_fourier, make_gf_dlr, fit_gf_dlr, make_gf_dlr_imtime, make_gf_imtime
+from triqs.gf import MeshDLRImFreq, Gf, BlockGf, make_gf_imfreq, make_hermitian, make_gf_dlr, fit_gf_dlr, make_gf_dlr_imtime, make_gf_imtime
 from triqs.gf.tools import inverse, make_zero_tail
 from triqs.gf.descriptors import Fourier
 from triqs.operators.util.U_matrix import reduce_4index_to_2index
@@ -38,13 +38,13 @@ class CTSEGInterface(AbstractDMFTSolver):
 
         # sets up necessary GF objects on ImFreq
         self._init_ImFreq_objects()
-        
+
         if self.solver_params.get('random_seed') is None:
             self.random_seed_generator = None
         else:
             self.random_seed_generator = MathExpr(self.solver_params['random_seed'])
-        
-        
+
+
 
         # Separately stores all params that go into solve() call of solver
         self.triqs_solver_params = {}
@@ -142,7 +142,7 @@ class CTSEGInterface(AbstractDMFTSolver):
 
         # call postprocessing
         self.postprocess()
-    
+
     def postprocess(self):
         r'''
         Organize G_freq, G_time, Sigma_freq and G_l from ctseg solver
