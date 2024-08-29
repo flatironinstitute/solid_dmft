@@ -506,8 +506,7 @@ def construct(sum_k, general_params, advanced_params):
             Umat_full = _generate_four_index_u_matrix(sum_k, general_params, icrsh)
 
             if sum_k.SO == 1:
-                Umat_full = [_adapt_U_4index_for_SO(Umat_full_per_imp)
-                             for Umat_full_per_imp in Umat_full]
+                Umat_full = _adapt_U_4index_for_SO(Umat_full)
 
             # Rotates the interaction matrix
             Umat_full_rotated = _rotate_four_index_matrix(sum_k, general_params, Umat_full, icrsh)
