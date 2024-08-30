@@ -105,17 +105,18 @@ class CTSEGInterface(AbstractDMFTSolver):
             # create full frequency objects
             Uloc_tau_2idx_prime = make_gf_imtime(Uloc_dlr_2idx_prime, n_tau=self.solver_params['n_tau_bosonic'])
 
-            Uloc_tau_2idx_prime_sumk = BlockGf(name_list=['up', 'down'], block_list=[Uloc_tau_2idx_prime, Uloc_tau_2idx_prime])
-            Uloc_tau_2idx_prime_solver = self.sum_k.block_structure.convert_gf(
-                Uloc_tau_2idx_prime_sumk, ish_from=self.icrsh, space_from='sumk', space_to='solver'
-            )
-
-            # fill D0_tau from Uloc_tau_2idx_prime
-            for iblock, Uloc_i in Uloc_tau_2idx_prime_solver:
-                for jblock, Uloc_j in Uloc_tau_2idx_prime_solver:
-                    # same spin and opposite spin interaction have same interaction for dynamic part
-                    # Hund's rule does not apply here
-                    self.triqs_solver.D0_tau[iblock, jblock] << Uloc_tau_2idx_prime_solver[iblock]
+            # fill D0_tau from Uloc_tau_2idx and Uloc_tau_2idx_prime
+            ish = self.sum_k.inequiv_to_corr[self.icrsh]
+            norb = Uloc_dlr.target_shape[0]
+            gf_struct = self.sum_k.gf_struct_solver_list[ish]
+            o1 = 0
+            for name1, n1 in gf_struct:
+                o2 = 0
+                for name2, n2 in gf_struct:
+                    # same and opposite spin are the same
+                    self.triqs_solver.D0_tau[name1, name2] << Uloc_tau_2idx_prime[o1:o1 + n1, o2:o2 + n2].real
+                    o2 = (o2 + n2) % norb
+                o1 = (o1 + n1) % norb
 
             # TODO: add Jerp_Iw to the solver
 
