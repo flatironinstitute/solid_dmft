@@ -92,7 +92,7 @@ class CTSEGInterface(AbstractDMFTSolver):
         self.triqs_solver.Delta_tau << self.Delta_time
 
         if self.general_params['h_int_type'][self.icrsh] == 'dyn_density_density':
-            mpi.report('add dynamic interaction from AIMBES')
+            mpi.report('\nAdding dynamic interaction from AIMBES.')
             # convert 4 idx tensor to two index tensor
             Uloc_dlr = self.gw_params['Uloc_dlr'][self.icrsh]['up']
             Uloc_dlr_2idx_prime = Gf(mesh=Uloc_dlr.mesh, target_shape=[Uloc_dlr.target_shape[0], Uloc_dlr.target_shape[1]])
@@ -101,6 +101,12 @@ class CTSEGInterface(AbstractDMFTSolver):
                 Uloc_dlr_idx = Uloc_dlr[coeff]
                 _, Uprime = reduce_4index_to_2index(Uloc_dlr_idx)
                 Uloc_dlr_2idx_prime[coeff] = Uprime
+
+            # extract w=0 limit for analytic Sigma_Hartree for the impurity
+            Uloc_w0_2idx_prime = make_gf_imfreq(Uloc_dlr_2idx_prime, n_iw=1)
+            self.Uw0_prime = Uloc_w0_2idx_prime.data[0].real
+            mpi.report('Screened interaction U(iw) at iw=0 w/o the shift of V_bare (density-density only): ')
+            mpi.report(self.Uw0_prime)
 
             # create full frequency objects
             Uloc_tau_2idx_prime = make_gf_imtime(Uloc_dlr_2idx_prime, n_tau=self.solver_params['n_tau_bosonic'])
@@ -176,10 +182,6 @@ class CTSEGInterface(AbstractDMFTSolver):
 
             return
 
-        # first print average sign
-        if mpi.is_master_node():
-            print('\nAverage sign: {}'.format(self.triqs_solver.results.average_sign))
-
         # get Delta_time from solver
         self.Delta_time << self.triqs_solver.Delta_tau
 
@@ -200,27 +202,44 @@ class CTSEGInterface(AbstractDMFTSolver):
         self.Sigma_Hartree_sumk = {}
         self.Sigma_moments = {}
         if mpi.is_master_node():
+            mpi.report('Evaluating static impurity self-energy analytically using interacting density from ctseg...\n'
+                       '(results will be used in the subsequent tail fitting or the crm dyson solver)')
             # get density density U tensor from solver
             U_dict = extract_U_dict2(self.h_int)
             # print("sum_k is" + self.sum_k.__repr__())
             norb = common.get_n_orbitals(self.sum_k)
             norb = norb[self.icrsh]['up']
             U_dd = dict_to_matrix(U_dict, gf_struct=self.sum_k.gf_struct_solver_list[self.icrsh])
-            # extract Uijij and Uijji terms
+            # extract Uijij (inter- and intra-orbital Coulomb) and Uijji (Hund's coupling) terms
+            # a) For static impurity problem, Us are the static screened interactions
+            # b) For dynamic impurity problem, Us are the bare interactions
             Uijij = U_dd[0:norb, norb : 2 * norb]
             Uijji = Uijij - U_dd[0:norb, 0:norb]
-            # and construct full Uijkl tensor
+            # and construct full Uijkl tensor for static interaction
             Uijkl = construct_Uijkl(Uijij, Uijji)
 
+            if self.general_params['h_int_type'][self.icrsh] == 'dyn_density_density':
+                # For dynamic impurity problems, separate Us are needed for the Hartree and exchange self-energy
+                # a) Hartree term is evaluated using the screened interactions at w=0
+                # b) Exchange term is evaluated using the bare interactions
+                Uijij += self.Uw0_prime
+                Uijji[:, :] = 0.0
+                Uw0_ijkl = construct_Uijkl(Uijij, Uijji)
+            else:
+                Uw0_ijkl = Uijkl
+
             # now calculated Hartree shift via
-            # \Sigma^0_{\alpha \beta} = \sum_{i j} n_{i j} \left( 2 U_{\alpha i \beta j} - U_{\alpha i j \beta} \right)
+            # \Sigma^0_{\alpha \beta} = \sum_{i j} n_{i j} \left( 2 Uw0_{\alpha i \beta j} - U_{\alpha i j \beta} \right)
             for block, norb in self.sum_k.gf_struct_sumk[self.icrsh]:
                 self.Sigma_Hartree_sumk[block] = np.zeros((norb, norb), dtype=float)
                 for iorb, jorb in product(range(norb), repeat=2):
                     for inner in range(norb):
-                        self.Sigma_Hartree_sumk[block][iorb, jorb] += self.orbital_occupations_sumk[block][inner, inner].real * (
-                            2 * Uijkl[iorb, inner, jorb, inner].real - Uijkl[iorb, inner, inner, jorb].real
-                        )
+                        # exchange diagram K
+                        self.Sigma_Hartree_sumk[block][iorb, jorb] -= (
+                                self.orbital_occupations_sumk[block][inner, inner].real * (Uijkl[iorb, inner, inner, jorb].real))
+                        # Hartree (Coulomb) diagram J
+                        self.Sigma_Hartree_sumk[block][iorb, jorb] += (
+                                self.orbital_occupations_sumk[block][inner, inner].real * (2 * Uw0_ijkl[iorb, inner, jorb, inner].real))
 
             # convert to solver block structure
             self.Sigma_Hartree = self.sum_k.block_structure.convert_matrix(
@@ -253,11 +272,13 @@ class CTSEGInterface(AbstractDMFTSolver):
 
         # if measured in Legendre basis, get G_l from solver too
         if self.solver_params['legendre_fit']:
+            mpi.report('Self-energy post-processing algorithm: Legendre fitting')
             self.G_time_orig << self.triqs_solver.results.G_tau
             self.G_l << legendre_filter.apply(self.G_time, self.solver_params['n_l'])
             # get G_time, G_freq, Sigma_freq from G_l
             set_Gs_from_G_l()
         elif self.solver_params['perform_tail_fit']:
+            mpi.report('Self-energy post-processing algorithm: tail fitting with analytic static impurity self-energy')
             self.Sigma_freq = inverse(self.G0_freq) - inverse(self.G_freq)
             # without any degenerate shells we run the minimization for all blocks
             self.Sigma_freq, tail = self._fit_tail_window(
@@ -275,6 +296,7 @@ class CTSEGInterface(AbstractDMFTSolver):
 
         # if improved estimators are turned on calc Sigma from F_tau, otherwise:
         elif self.solver_params['improved_estimator']:
+            mpi.report('Self-energy post-processing algorithm: improved estimator')
             self.F_freq = self.G_freq.copy()
             self.F_freq << 0.0
             self.F_time = self.G_time.copy()
@@ -283,6 +305,7 @@ class CTSEGInterface(AbstractDMFTSolver):
             if mpi.is_master_node():
                 for i, bl in enumerate(self.F_freq.indices):
                     self.F_freq[bl] << Fourier(self.triqs_solver.results.F_tau[bl], F_known_moments[i])
+                # TODO CNY: remove it once tail fitting is activated
                 # fit tail of improved estimator and G_freq
                 self.F_freq << self._gf_fit_tail_fraction(self.F_freq, fraction=0.9, replace=0.5, known_moments=F_known_moments)
                 self.G_freq << self._gf_fit_tail_fraction(self.G_freq, fraction=0.9, replace=0.5, known_moments=Gf_known_moments)
@@ -295,6 +318,7 @@ class CTSEGInterface(AbstractDMFTSolver):
 
         # should this be moved to abstract class?
         elif self.solver_params['crm_dyson_solver']:
+            mpi.report('Self-energy post-processing algorithm: crm dyson solver')
             from triqs.gf.dlr_crm_dyson_solver import minimize_dyson
 
             mpi.report('\nCRM Dyson solver to extract Σ impurity\n')
