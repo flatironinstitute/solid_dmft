@@ -354,20 +354,20 @@ max_time : int, default = -1
         maximum amount the solver is allowed to spend in each iteration
 measure_G_tau : bool, default = True
         should the solver measure G(tau)?
-measure_nnt : boold, default = False
+measure_nn_tau : boold, default = False
         measure two particle density-density correlation function (suszeptibility)
 measure_pert_order : bool, default = False
         measure perturbation order histograms: triqs.github.io/cthyb/latest/guide/perturbation_order_notebook.html.
         The result is stored in the h5 archive under 'DMFT_results' at every iteration
         in the subgroups 'pert_order_imp_X' and 'pert_order_total_imp_X'
-measure_statehist : bool, default = False
+measure_state_hist : bool, default = False
         measure state histogram, i.e. diagonal components of many body density matrix
 n_cycles_tot : int, mandatory
         total number of sweeps
 n_l : int, default = None
         number of Legendre coefficients.
         Needed if measure_G_l=True or legendre_fit=True
-n_tau_k : int, default = 10001
+n_tau_bosonic : int, default = 10001
         number imaginary time points for dynamic interactions
 n_warmup_cycles : int, mandatory
         number of warmup cycles before real measurement sets in
