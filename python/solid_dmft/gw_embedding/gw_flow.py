@@ -233,8 +233,9 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
     assert gw_params['code'] == 'aimbes', 'Only AIMBES is currently supported as gw code'
 
     # prepare output h5 archive
+    archive = general_params['jobname']+'/'+general_params['seedname']+'.h5'
     if mpi.is_master_node():
-        with HDFArchive(general_params['jobname'] + '/' + general_params['seedname'] + '.h5', 'a') as ar:
+        with HDFArchive(archive, 'a') as ar:
             if 'DMFT_results' not in ar:
                 ar.create_group('DMFT_results')
             if 'last_iter' not in ar['DMFT_results']:
@@ -336,7 +337,7 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
 
     # write block structure to h5 archive
     if gw_params['it_1e'] == 1 and mpi.is_master_node():
-        with HDFArchive(general_params['jobname'] + '/' + general_params['seedname'] + '.h5', 'a') as ar:
+        with HDFArchive(archive, 'a') as ar:
             if 'block_structure' not in ar['DMFT_input']:
                 ar['DMFT_input']['block_structure'] = sumk.block_structure
             if 'deg_shells' not in ar['DMFT_input']:
@@ -558,16 +559,13 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
         print("\nChecking impurity self-energy on the IR mesh...")
         ir_kernel.check_leakage(Sigma_ir, stats='f', name="impurity self-energy", w_input=True)
 
-
     # Writes results to h5 archive
-    mpi.report('Writing iter {} results to h5 archives {}/{}.h5 and {}.'.format(
-        iteration, general_params['jobname'], general_params['seedname'], gw_params['h5_file']))
+    mpi.report('Writing iter {} results to h5 archives {} and {}.'.format(iteration, archive, gw_params['h5_file']))
     if mpi.is_master_node():
-        with HDFArchive(general_params['jobname'] + '/' + general_params['seedname'] + '.h5', 'a') as ar:
-            results_to_archive.write(ar, sumk, general_params, solver_params, solvers,
-                                     map_imp_solver, solver_type_per_imp, iteration,
-                                     False, gw_params['mu_emb'], density_mat_pre, density_mat)
-
+        results_to_archive.write(archive, sumk, general_params, solver_params, solvers,
+                                 map_imp_solver, solver_type_per_imp, iteration,
+                                 False, gw_params['mu_emb'], density_mat_pre, density_mat)
+        with HDFArchive(archive, 'a') as ar:
             # store also IR / DLR Sigma
             ar['DMFT_results/it_{}'.format(iteration)]['ir_mesh'] = ir_mesh
             ar['DMFT_results/it_{}'.format(iteration)]['Sigma_imp_wsIab'] = Sigma_ir
@@ -576,7 +574,7 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
                 ar['DMFT_results/it_{}'.format(iteration)][f'Sigma_dlr_{ish}'] = Sigma_dlr[ish]
 
         # write results to GW h5_file
-        with HDFArchive(gw_params['h5_file'],'a') as ar:
+        with HDFArchive(gw_params['h5_file'], 'a') as ar:
             ar[f'downfold_1e/iter{iteration}']['Sigma_imp_wsIab'] = Sigma_ir
             ar[f'downfold_1e/iter{iteration}']['Vhf_imp_sIab'] = Vhf_imp_sIab
 

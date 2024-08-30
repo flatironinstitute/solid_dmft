@@ -278,8 +278,24 @@ class CTSEGInterface(AbstractDMFTSolver):
             # get G_time, G_freq, Sigma_freq from G_l
             set_Gs_from_G_l()
         elif self.solver_params['perform_tail_fit']:
-            mpi.report('Self-energy post-processing algorithm: tail fitting with analytic static impurity self-energy')
-            self.Sigma_freq = inverse(self.G0_freq) - inverse(self.G_freq)
+            if not self.solver_params['improved_estimator']:
+                mpi.report('Self-energy post-processing algorithm: tail fitting with analytic static impurity self-energy')
+                self.Sigma_freq = inverse(self.G0_freq) - inverse(self.G_freq)
+            else:
+                mpi.report('Self-energy post-processing algorithm: '
+                           'improved estimator + tail fitting with analytic static imppurity self-energy')
+                self.F_freq = self.G_freq.copy()
+                self.F_freq << 0.0
+                self.F_time = self.G_time.copy()
+                self.F_time << self.triqs_solver.results.F_tau
+                F_known_moments = make_zero_tail(self.F_freq, n_moments=1)
+                for i, bl in enumerate(self.F_freq.indices):
+                    self.F_freq[bl] << Fourier(self.triqs_solver.results.F_tau[bl], F_known_moments[i])
+
+                for block, fw in self.F_freq:
+                    for iw in fw.mesh:
+                        self.Sigma_freq[block][iw] = self.F_freq[block][iw] / self.G_freq[block][iw]
+
             # without any degenerate shells we run the minimization for all blocks
             self.Sigma_freq, tail = self._fit_tail_window(
                 self.Sigma_freq,
@@ -295,41 +311,19 @@ class CTSEGInterface(AbstractDMFTSolver):
             self.G_freq = inverse(inverse(self.G0_freq) - self.Sigma_freq)
 
         # if improved estimators are turned on calc Sigma from F_tau, otherwise:
-        elif self.solver_params['improved_estimator']:
-            if self.solver_params['perform_tail_fit']:
-                mpi.report('Self-energy post-processing algorithm: '
-                           'improved estimator + tail fitting with analytic static imppurity self-energy')
-            else:
-                mpi.report('Self-energy post-processing algorithm: improved estimator')
+        elif self.solver_params['improved_estimator'] and not self.solver_params['perform_tail_fit']:
+            mpi.report('Self-energy post-processing algorithm: improved estimator')
             self.F_freq = self.G_freq.copy()
             self.F_freq << 0.0
             self.F_time = self.G_time.copy()
             self.F_time << self.triqs_solver.results.F_tau
             F_known_moments = make_zero_tail(self.F_freq, n_moments=1)
-            if mpi.is_master_node():
-                for i, bl in enumerate(self.F_freq.indices):
-                    self.F_freq[bl] << Fourier(self.triqs_solver.results.F_tau[bl], F_known_moments[i])
+            for i, bl in enumerate(self.F_freq.indices):
+                self.F_freq[bl] << Fourier(self.triqs_solver.results.F_tau[bl], F_known_moments[i])
 
-            self.F_freq << mpi.bcast(self.F_freq)
-            self.G_freq << mpi.bcast(self.G_freq)
             for block, fw in self.F_freq:
                 for iw in fw.mesh:
                     self.Sigma_freq[block][iw] = self.F_freq[block][iw] / self.G_freq[block][iw]
-
-            # Further tail fitting on top of Sigma_freq from the improved estimator
-            if self.solver_params['perform_tail_fit']:
-                # without any degenerate shells we run the minimization for all blocks
-                self.Sigma_freq, tail = self._fit_tail_window(
-                    self.Sigma_freq,
-                    fit_min_n=self.solver_params['fit_min_n'],
-                    fit_max_n=self.solver_params['fit_max_n'],
-                    fit_min_w=self.solver_params['fit_min_w'],
-                    fit_max_w=self.solver_params['fit_max_w'],
-                    fit_max_moment=self.solver_params['fit_max_moment'],
-                    fit_known_moments=self.Sigma_moments,
-                )
-            # recompute G_freq from Sigma_freq
-            self.G_freq = inverse(inverse(self.G0_freq) - self.Sigma_freq)
 
         # should this be moved to abstract class?
         elif self.solver_params['crm_dyson_solver']:
@@ -408,9 +402,6 @@ class CTSEGInterface(AbstractDMFTSolver):
 
         if self.solver_params['measure_pert_order']:
             self.perturbation_order_histo = self.triqs_solver.results.pert_order_Delta
-            bin_vec = np.arange(0, self.perturbation_order_histo.data.shape[0])
-            self.avg_pert_order = np.sum(bin_vec * self.perturbation_order_histo.data[:])
-            if mpi.is_master_node():
-                print(f'Average perturbation order: {self.avg_pert_order}')
+            self.avg_pert_order = self.triqs_solver.results.average_order_Delta
 
         return
