@@ -112,7 +112,13 @@ def _verify_input_params_solver(params: FullConfig) -> None:
                        entry['improved_estimator'],
                        entry['perform_tail_fit']]
             if sum(tail_op) > 1:
-                raise ValueError('Only one of the options "crm_dyson_solver", "legendre_fit", "improved_estimator", and "perform_tail_fit" can be set to True.')
+                # allow improved_estimator + tail_fit
+                if sum([entry['improved_estimator'], entry['perform_tail_fit']]) < 2:
+                    raise ValueError(
+                        'Except "improved_estimator" + "perform_tail_fit", '
+                        'only one of the options "crm_dyson_solver", "legendre_fit", '
+                        '"improved_estimator", and "perform_tail_fit" can be set to True.'
+                    )
         if entry['type'] == 'cthyb':
             tail_op = [entry['crm_dyson_solver'],
                        entry['legendre_fit'],
