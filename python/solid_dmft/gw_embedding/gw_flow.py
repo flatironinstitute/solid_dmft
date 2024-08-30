@@ -55,7 +55,7 @@ from solid_dmft.version import solid_dmft_hash
 from solid_dmft.version import version as solid_dmft_version
 from solid_dmft.dmft_tools import formatter
 from solid_dmft.dmft_tools import results_to_archive
-from solid_dmft.dmft_tools.solver import SolverStructure
+from solid_dmft.dmft_tools.solver import create_solver
 from solid_dmft.dmft_tools import interaction_hamiltonian
 from solid_dmft.dmft_cycle import _extract_quantity_per_inequiv, _determine_block_structure
 from solid_dmft.dmft_tools import greens_functions_mixer as gf_mixer
@@ -360,10 +360,18 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
                                  sumk.n_inequiv_shells,
                                  max(gw_params['n_orb']),max(gw_params['n_orb'])),dtype=complex)
 
-    for ish in range(sumk.n_inequiv_shells):
+    for icrsh in range(sumk.n_inequiv_shells):
         # Construct the Solver instances
-        solvers[ish] = SolverStructure(general_params, solver_params[map_imp_solver[ish]],
-                                       gw_params, advanced_params, sumk, ish, h_int[ish])
+        mpi.report("Creating solver with new interface")
+        solvers[icrsh] = create_solver(general_params=general_params,
+                                       solver_params=solver_params[map_imp_solver[icrsh]],
+                                       gw_params=gw_params,
+                                       advanced_params=advanced_params,
+                                       sum_k=sumk,
+                                       h_int=h_int[icrsh],
+                                       icrsh=icrsh,
+                                       iteration_offset=iteration,
+                                       deg_orbs_ftps=None)
 
     # init local density matrices for observables
     density_tot = 0.0
