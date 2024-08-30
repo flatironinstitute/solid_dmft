@@ -181,7 +181,12 @@ def tail_fit_g_weiss(g_weiss_wsIab, ir_kernel, gw_data, wmax_imp=None, eps_imp=N
 
 def bath_fitting(delta_wsIab, iw_mesh, Np=5):
     mpi.report(f"Bath fitting for hybridization with nbath/impurity orbital = {Np}")
-    from adapol import hybfit
+    try:
+        from adapol import hybfit
+    except ImportError:
+        raise ImportError("bath fitting requires the adapol package (https://github.com/flatironinstitute/adapol). \n"
+                          "Please ensure that it is installed. ")
+
     nspin, nImp = delta_wsIab.shape[1:3]
     error = -1
     for s in np.arange(nspin):
