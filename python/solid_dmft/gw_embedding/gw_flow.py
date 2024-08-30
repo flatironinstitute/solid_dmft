@@ -268,6 +268,16 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
     gw_params = mpi.bcast(gw_params)
     iteration = gw_params['it_1e']
 
+    # check if general_params[n_iw] is consistent with dlr meshes
+    mesh_f_idx = np.array([iw.index for iw in gw_params['mesh_dlr_iw_f']])
+    mesh_b_idx = np.array([iw.index for iw in gw_params['mesh_dlr_iw_b']])
+    max_idx = max(abs(mesh_f_idx[0]), abs(mesh_f_idx[-1]), abs(mesh_b_idx[0]), abs(mesh_b_idx[-1]))
+    if max_idx > general_params['n_iw']:
+        mpi.report(f"\n!!! WARNING !!!!\n"
+                   f"general_params['n_iw'] = {general_params['n_iw']} < maximum DLRImFreq index ({max_idx}). "
+                   f"solid_dmft will automatically set general_params['n_iw'] = {max_idx+1}.\n")
+        general_params['n_iw'] = max_idx + 1
+
     general_params['beta'] = gw_params['beta']
     sumk_mesh = MeshImFreq(beta=general_params['beta'], statistic='Fermion', n_iw=general_params['n_iw'])
 
@@ -421,15 +431,21 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
 
             # Make non-interacting operator for Hloc0
             Hloc_0 = Operator()
-            for spin, spin_block in imp_eal.items():
-                for o1 in range(spin_block.shape[0]):
-                    for o2 in range(spin_block.shape[1]):
-                        # check if off-diag element is larger than threshold
-                        if o1 != o2 and abs(spin_block[o1, o2]) < solvers[ish].solver_params['off_diag_threshold']:
-                            continue
-                        else:
-                            # TODO: adapt for SOC calculations, which should keep the imag part
-                            Hloc_0 += spin_block[o1, o2].real / 2 * (c_dag(spin, o1) * c(spin, o2) + c_dag(spin, o2) * c(spin, o1))
+            if solver_type_per_imp[ish] == 'ctseg':
+                mpi.report('Discarding off-diagonals in Hloc_0 anyway since ctseg enforces it.')
+                for spin, spin_block in imp_eal.items():
+                    for o1 in range(spin_block.shape[0]):
+                        Hloc_0 += spin_block[o1, o1].real * c_dag(spin, o1) * c(spin, o1)
+            else:
+                for spin, spin_block in imp_eal.items():
+                    for o1 in range(spin_block.shape[0]):
+                        for o2 in range(spin_block.shape[1]):
+                            # check if off-diag element is larger than threshold
+                            if o1 != o2 and abs(spin_block[o1, o2]) < solver_params[ish]['off_diag_threshold']:
+                                continue
+                            else:
+                                # TODO: adapt for SOC calculations, which should keep the imag part
+                                Hloc_0 += spin_block[o1, o2].real / 2 * (c_dag(spin, o1) * c(spin, o2) + c_dag(spin, o2) * c(spin, o1))
             solvers[ish].Hloc_0 = Hloc_0
 
         mpi.report('\nSolving the impurity problem for shell {} ...'.format(ish))
@@ -521,9 +537,9 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
             for i, (block, gf) in enumerate(Sigma_dlr_sumk):
                 Vhf_imp_sIab[i,ish] = Sigma_Hartree_sumk[block]
                 # Make sure sigma_ir[iw].conj() = sigma_ir[-iw]
-                for n in range(ir_nw_half):
-                    iw_pos = ir_nw_half+n
-                    iw_neg = ir_nw_half-1-n
+                for iw_idx in range(ir_nw_half):
+                    iw_pos = ir_nw_half+iw_idx
+                    iw_neg = ir_nw_half-1-iw_idx
                     Sigma_ir[iw_pos,i,ish] = gf(iw_mesh(ir_mesh_idx[iw_pos]))
                     Sigma_ir[iw_neg,i,ish] = gf(iw_mesh(ir_mesh_idx[iw_pos])).conj()
 
