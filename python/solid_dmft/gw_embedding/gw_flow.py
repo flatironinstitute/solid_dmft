@@ -49,6 +49,7 @@ from triqs.version import version as triqs_version
 from triqs.gf.meshes import MeshImFreq
 from triqs.operators import c_dag, c, Operator
 from triqs_dft_tools.block_structure import BlockStructure
+from triqs_dft_tools.sumk_dft import SumkDFT
 
 from solid_dmft.version import solid_dmft_hash
 from solid_dmft.version import version as solid_dmft_version
@@ -56,7 +57,7 @@ from solid_dmft.dmft_tools import formatter
 from solid_dmft.dmft_tools import results_to_archive
 from solid_dmft.dmft_tools.solver import SolverStructure
 from solid_dmft.dmft_tools import interaction_hamiltonian
-from solid_dmft.dmft_cycle import _extract_quantity_per_inequiv
+from solid_dmft.dmft_cycle import _extract_quantity_per_inequiv, _determine_block_structure
 from solid_dmft.dmft_tools import greens_functions_mixer as gf_mixer
 from solid_dmft.gw_embedding.bdft_converter import convert_gw_output
 
@@ -267,25 +268,22 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
     gw_params = mpi.bcast(gw_params)
     iteration = gw_params['it_1e']
 
+    general_params['beta'] = gw_params['beta']
+    sumk_mesh = MeshImFreq(beta=general_params['beta'], statistic='Fermion', n_iw=general_params['n_iw'])
+
     # if GW calculation was performed with spin never average spin channels
     if gw_params['number_of_spins'] == 2:
         general_params['magnetic'] = True
 
-    # dummy helper class for sumk
-    sumk = dummy_sumk(gw_params['n_inequiv_shells'], gw_params['n_orb'],
-                      general_params['enforce_off_diag'], gw_params['use_rot'],
-                      general_params['magnetic'])
-
-    sumk.mesh = MeshImFreq(beta=gw_params['beta'], statistic='Fermion', n_iw=general_params['n_iw'])
+    sumk = SumkDFT(hdf_file=general_params['jobname'] + '/' + general_params['seedname'] + '.h5',
+                   mesh=sumk_mesh, use_dft_blocks=False, h_field=general_params['h_field'])
     sumk.chemical_potential = gw_params['mu_emb']
     sumk.dc_imp = gw_params['Vhf_dc']
-    general_params['beta'] = gw_params['beta']
 
-    # create h_int
-    general_params = _extract_quantity_per_inequiv('h_int_type', sumk.n_inequiv_shells, general_params)
-    general_params = _extract_quantity_per_inequiv('dc_type', sumk.n_inequiv_shells, general_params)
-
-    h_int, gw_params = interaction_hamiltonian.construct(sumk, general_params, advanced_params, gw_params)
+    for key in ['h_int_type', 'dc_type', 'enforce_off_diag']:
+        general_params = _extract_quantity_per_inequiv(key, sumk.n_inequiv_shells, general_params)
+    for key in ['map_solver_struct', 'pick_solver_struct', 'mapped_solver_struct_degeneracies']:
+        advanced_params = _extract_quantity_per_inequiv(key, sumk.n_inequiv_shells, advanced_params)
 
     if len(solver_params) == 1 and solver_params[0]['idx_impurities'] is None:
         map_imp_solver = [0] * sumk.n_inequiv_shells
@@ -303,6 +301,39 @@ def embedding_driver(general_params, solver_params, gw_params, advanced_params):
                     break
     solver_type_per_imp = [solver_params[map_imp_solver[iineq]]['type'] for iineq in range(sumk.n_inequiv_shells)]
     mpi.report(f'\nSolver type per impurity: {solver_type_per_imp}')
+
+    # determine block_structure
+    dens_mat_gw = [None] * sumk.n_inequiv_shells
+    for ish in range(sumk.n_inequiv_shells):
+        dens_mat_gw[ish] = gw_params['Gloc_dlr'][ish].density()
+    sumk, _ = _determine_block_structure(sumk, general_params, advanced_params, solver_type_per_imp, dens_mat_gw)
+
+    # print block structure and rotation matrix based on the DFT input
+    if mpi.is_master_node():
+        print('\n number of ineq. correlated shells: {}'.format(sumk.n_inequiv_shells))
+        print('\n block structure summary')
+        for icrsh in range(sumk.n_inequiv_shells):
+            shlst = [ish for ish, ineq_shell in enumerate(sumk.corr_to_inequiv) if ineq_shell == icrsh]
+            print(' -- Shell type #{:3d}: '.format(icrsh) + format(shlst))
+            print('  | shell multiplicity ' + str(len(shlst)))
+            print('  | block struct. sum_k : ' + format(sumk.gf_struct_sumk[sumk.inequiv_to_corr[icrsh]]))
+            print('  | block struct. solver: ' + format(sumk.gf_struct_solver[icrsh]))
+            print('  | deg. orbitals : ' + format(sumk.deg_shells[icrsh]))
+
+        print('\nRotation matrices')
+        formatter.print_rotation_matrix(sumk)
+    mpi.barrier()
+
+    # write block structure to h5 archive
+    if gw_params['it_1e'] == 1 and mpi.is_master_node():
+        with HDFArchive(general_params['jobname'] + '/' + general_params['seedname'] + '.h5', 'a') as ar:
+            if 'block_structure' not in ar['DMFT_input']:
+                ar['DMFT_input']['block_structure'] = sumk.block_structure
+            if 'deg_shells' not in ar['DMFT_input']:
+                ar['DMFT_input']['deg_shells'] = sumk.deg_shells
+
+    # create h_int
+    h_int, gw_params = interaction_hamiltonian.construct(sumk, general_params, advanced_params, gw_params)
 
     # create solver objects
     solvers = [None] * sumk.n_inequiv_shells

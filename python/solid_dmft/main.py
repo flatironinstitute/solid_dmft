@@ -96,9 +96,22 @@ def run_dmft(params, config_file_name=None):
     elif general_params['gw_embedding']:
         from solid_dmft.gw_embedding.gw_flow import embedding_driver
         if mpi.is_master_node():
+            # Checks for h5 file
+            if not os.path.exists(general_params['seedname']+'.h5'):
+                raise FileNotFoundError('Input h5 file not found')
+
             # Creates output directory if it does not exist
             if not os.path.exists(general_params['jobname']):
                 os.makedirs(general_params['jobname'])
+
+            # Copies h5 archive to subfolder if it is not there
+            h5_name = general_params['seedname']+'.h5'
+            if not os.path.isfile(general_params['jobname']+'/'+os.path.basename(h5_name)):
+                shutil.copyfile(h5_name, general_params['jobname']+'/'+os.path.basename(h5_name))
+
+            # Copies config file to subfolder
+            if config_file_name is not None:
+                shutil.copyfile(config_file_name, general_params['jobname']+'/'+os.path.basename(config_file_name))
         mpi.barrier()
         # run GW embedding
         embedding_driver(general_params, solver_params, gw_params, advanced_params)
