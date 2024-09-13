@@ -2,6 +2,10 @@
 FROM flatironinstitute/cthyb:master-ubuntu-clang
 ARG APPNAME=solid_dmft
 
+RUN apt-get install -y meson ninja-build python3-setuptools python3-skimage
+
+ENV OMP_NUM_THREADS=1
+
 # install dfttools maxent hubbardI and HartreeFock
 # dft_tools
 RUN cd / && git clone -b 3.2.x --depth 1 https://github.com/TRIQS/dft_tools.git dft_tools.src \
@@ -26,9 +30,6 @@ RUN cd / && git clone -b 1.2.x --depth 1 https://github.com/TRIQS/maxent.git max
     && mkdir -p maxent.build && cd maxent.build \
     && cmake ../maxent.src \
     && make install
-
-COPY requirements.txt /src/$APPNAME/requirements.txt
-RUN pip3 install -r /src/$APPNAME/requirements.txt
 
 COPY --chown=build . $SRC/$APPNAME
 WORKDIR $BUILD/$APPNAME
