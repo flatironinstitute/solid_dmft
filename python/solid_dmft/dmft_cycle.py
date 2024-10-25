@@ -814,7 +814,6 @@ def _dmft_step(sum_k, solvers, it, general_params, solver_params, gw_params,
         assert dft_irred_kpt_indices is None or dft_params['dft_code'] == 'vasp'
         deltaN, dens, E_bandcorr = sum_k.calc_density_correction(dm_type=dft_params['dft_code'],
                                                                  kpts_to_write=dft_irred_kpt_indices)
-
     elif general_params['calc_energies']:
         # for a one shot calculation we are using our own method
         E_bandcorr = calc_bandcorr_man(general_params, sum_k, E_kin_dft)
