@@ -538,6 +538,10 @@ def plot_bands(fig, ax, alatt_k_w, tb_data, freq_dict, n_orb, tb=True, alatt=Fal
 
     assert tb_data['special_k'] is not None, 'a regular k point mesh has been used, please call plot_dos'
 
+    lw = plot_dict.get('lw', 1)
+    tb_label = plot_dict.get('tb_label', r'tight-binding')
+
+
     proj_on_orb = tb_data['proj_on_orb']
     total_proj = tb_data['proj_nuk']
 
@@ -573,7 +577,10 @@ def plot_bands(fig, ax, alatt_k_w, tb_data, freq_dict, n_orb, tb=True, alatt=Fal
                     color = eval('cm.'+plot_dict['colorscheme_bands'])(1.0)
                 else:
                     color = plot_dict['colorscheme_bands']
-                ax.plot(tb_data['k_mesh'], eps_nuk[band, band].real - tb_data['mu_tb'], c=color, label=r'tight-binding', zorder=1., lw=1)
+                if band == 0:
+                    ax.plot(tb_data['k_mesh'], eps_nuk[band, band].real - tb_data['mu_tb'], c=color, label=tb_label, zorder=1., lw=lw)
+                else:
+                    ax.plot(tb_data['k_mesh'], eps_nuk[band, band].real - tb_data['mu_tb'], c=color, zorder=1., lw=lw)
             else:
                 color = eval('cm.'+plot_dict['colorscheme_bands'])(total_proj[band])
                 ax.scatter(tb_data['k_mesh'], eps_nuk[band, band].real - tb_data['mu_tb'], c=color, s=1, label=r'tight-binding', zorder=1.)
