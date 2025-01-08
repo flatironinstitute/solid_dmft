@@ -107,6 +107,10 @@ class CTHYBInterface(AbstractDMFTSolver):
         else:
             assert 'random_seed' not in self.triqs_solver_params
 
+        # pass measure_O_tau which is prepared late in dmft cycle and only ready now
+        if self.solver_params['measure_chi'] is not None:
+            self.triqs_solver_params['measure_O_tau'] = self.solver_params['measure_O_tau']
+
         if self.solver_params['delta_interface']:
             self.triqs_solver.Delta_tau << self.Delta_time
             self.triqs_solver_params['h_loc0'] = self.Hloc_0
