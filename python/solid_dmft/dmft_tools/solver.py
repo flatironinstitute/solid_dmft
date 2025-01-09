@@ -448,6 +448,10 @@ class SolverStructure:
                 # fill G0_freq from sum_k to solver
                 self.triqs_solver.G0_iw << make_hermitian(self.G0_freq)
 
+            # pass measure_O_tau which is prepared late in dmft cycle and only ready now
+            if self.solver_params['measure_chi'] is not None:
+                self.triqs_solver_params['measure_O_tau'] = self.solver_params['measure_O_tau']
+
             # update solver in h5 archive one last time for debugging if solve command crashes
             if self.general_params['store_solver'] and mpi.is_master_node():
                 with HDFArchive(self.general_params['jobname']+'/'+self.general_params['seedname']+'.h5', 'a') as archive:
