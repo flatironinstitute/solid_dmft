@@ -1,0 +1,21 @@
+dmft\_tools.solver
+==================
+
+.. automodule:: dmft_tools.solver
+    :members:
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
