@@ -12,7 +12,8 @@ Prerequisites
 
 #. Make sure to install besides the triqs requirements also the python packages::
 
-     $ pip3 install --user scipy argparse pytest
+     $ pip3 install --user scipy numpy scikit-image
+
 
 #. To build the documentation the following extra python packages are needed::
 
@@ -41,8 +42,8 @@ We provide hereafter the build instructions in the form of a documented bash scr
     git clone https://github.com/flatironinstitute/solid_dmft solid_dmft.src
 
     # checkout the branch of solid_dmft matching your triqs version. 
-    # For example if you use the 3.1.x branch of triqs, dfttools. and cthyb
-    git checkout 3.1.x
+    # For example if you use the 3.3.x branch of triqs, dfttools. and cthyb
+    git checkout 3.3.x
 
     # Create and move to a new directory where you will compile the code
     mkdir solid_dmft.build && cd solid_dmft.build
@@ -68,9 +69,9 @@ and serve it locally as under `127.0.0.1:8000`.
 Docker files & images
 ---------------------
 
-We `provide docker files <https://github.com/TRIQS/solid_dmft/tree/3.1.x/Docker>`_ to build solid_dmft inside a docker container with all dependencies and instructions on how to integrate the connected DFT codes as well. Additionally, we host a most recent unstable version of the docker image used for the github CI `on dockerhub <https://hub.docker.com/r/materialstheory/solid_dmft_ci>`_. To use this version, which includes the cthyb solver, the hubbardI solver, dfttools, and the maxent package, pull the following image::
+We `provide docker files <https://github.com/TRIQS/solid_dmft/tree/3.3.x/Docker>`_ to build solid_dmft inside a docker container with all dependencies and instructions on how to integrate the connected DFT codes as well. Additionally, we host a most versions of the docker image on the `github image hub ghcr <ghcr.io/triqs/solid_dmft_openmpi:3.3.x>`_. To use this version, which includes the cthyb solver, the hubbardI solver, dfttools, and the maxent package, pull the following image::
 
-    $ docker pull materialstheory/solid_dmft_ci
+    $ docker pull ghcr.io/triqs/solid_dmft_openmpi:3.3.x
 
 
 Version compatibility
@@ -85,7 +86,7 @@ To use a particular version, go into the directory with the sources, and look at
 
 Checkout the version of the code that you want::
 
-     $ git checkout 3.1.x
+     $ git checkout 3.3.x
 
 and follow steps 3 to 6 above to compile the code.
 
